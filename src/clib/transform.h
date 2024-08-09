@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 // Pi
 const double PI     = 3.14159265358979323846;
@@ -81,6 +82,8 @@ double great_circle_angle_64bit(
  * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
  * @param i_max extent of `arr` along the first index
  * @param j_max extent of `arr` along the second index
+ * @param threshold angle of separation threshold in radians
+ * @param arr_out a pointer to a 2D array for an output
  * 
  * @warning This function is intended to be called from a Python interface.
  * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
@@ -88,7 +91,7 @@ double great_circle_angle_64bit(
  *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
  * @warning `arr_out` must be initialized with `false`.
  */
-void fused_distance_threshold_transform_32bit(
+void sph_fused_distance_threshold_transform_32bit(
     bool * arr,
     int32_t i_max,
     int32_t j_max,
@@ -100,11 +103,15 @@ void fused_distance_threshold_transform_32bit(
  * Spherical distance and threshold transforms on a mercator projection. This 
  * function updates `arr_out` such that all `true` in `arr` is preserved and
  * the `false` depending on whether their great circle angular distance from a 
- * local `true` is less than `threshold` becomes a `true`.
+ * local `true` is less than `threshold` becomes a `true`. This function is
+ * threaded to help with the processing time.
  * 
  * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
  * @param i_max extent of `arr` along the first index
  * @param j_max extent of `arr` along the second index
+ * @param threshold angle of separation threshold in radians
+ * @param arr_out a pointer to a 2D array for an output
+ * @param num_threads number of threads
  * 
  * @warning This function is intended to be called from a Python interface.
  * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
@@ -112,12 +119,69 @@ void fused_distance_threshold_transform_32bit(
  *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
  * @warning `arr_out` must be initialized with `false`.
  */
-void fused_distance_threshold_transform_64bit(
+void sph_fused_distance_threshold_transform_32bit_threaded(
+    bool * arr,
+    int32_t i_max,
+    int32_t j_max,
+    float threshold,
+    bool * arr_out,
+    int32_t num_threads
+);
+
+/**
+ * Spherical distance and threshold transforms on a mercator projection. This 
+ * function updates `arr_out` such that all `true` in `arr` is preserved and
+ * the `false` depending on whether their great circle angular distance from a 
+ * local `true` is less than `threshold` becomes a `true`. This version is 
+ * double precision.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param threshold angle of separation threshold in radians
+ * @param arr_out a pointer to a 2D array for an output
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with `false`.
+ */
+void sph_fused_distance_threshold_transform_64bit(
     bool * arr,
     int64_t i_max,
     int64_t j_max,
     double threshold,
     bool * arr_out
+);
+
+/**
+ * Spherical distance and threshold transforms on a mercator projection. This 
+ * function updates `arr_out` such that all `true` in `arr` is preserved and
+ * the `false` depending on whether their great circle angular distance from a 
+ * local `true` is less than `threshold` becomes a `true`. This version is 
+ * double precision. This function is threaded to help with the processing time.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param threshold angle of separation threshold in radians
+ * @param arr_out a pointer to a 2D array for an output
+ * @param num_threads number of threads
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with `false`.
+ */
+void sph_fused_distance_threshold_transform_64bit_threaded(
+    bool * arr,
+    int64_t i_max,
+    int64_t j_max,
+    double threshold,
+    bool * arr_out,
+    int64_t num_threads
 );
 
 #endif
