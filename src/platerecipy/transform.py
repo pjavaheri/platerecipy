@@ -3,7 +3,7 @@
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
 @brief Module for transformation functions.
 """
-
+import os
 import ctypes
 import sysconfig
 from pathlib import Path
@@ -30,7 +30,38 @@ def sph_fused_distance_threshold_transform(
     mercator projection of a sphere. The transformation preserves the `True` and
     modifies `False` according to whether the cell is within the vicinity of a
     `True` determined by the great circle angle of separation
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Input boolean array to apply the transformation.
+    
+    threshold : float
+        Angular threshold (great circle separation) in radians.
+    
+    double_precision : bool, default=True
+        If the floating point operations must be carried out in double precision.
+    
+    num_threads : int, default=1
+        Number of threads to divide the task. It is possible instead pass the
+        string `'auto'` which results in using number of threads equal to the
+        number of CPUs.
+    
+    Returns
+    -------
+        np.ndarray
+
+    Warning
+    -------
+    Aside from the usual computational trade off between parallel threads and 
+    communication, in this function, the algorithm benefits from progression 
+    through the array. When the array is divided between threads, the benefit 
+    of adjacent threads can get diminished. Although in most cases, using several
+    threads (4, 8, or 16) is effective in speeding up calculation. 
     """
+
+    if num_threads == 'auto':
+        num_threads = os.cpu_count()
 
     arr_out = np.zeros(arr.shape, dtype=bool)
 

@@ -256,6 +256,8 @@ void * sph_fused_distance_threshold_transform_32bit_threaded_func(
             }
         }
     }
+
+    return NULL;
 }
 
 void sph_fused_distance_threshold_transform_32bit_threaded(
@@ -392,6 +394,7 @@ void * sph_fused_distance_threshold_transform_64bit_threaded_func(
             }
         }
     }
+    return NULL;
 }
 
 void sph_fused_distance_threshold_transform_64bit_threaded(
