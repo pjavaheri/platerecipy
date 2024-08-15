@@ -5,7 +5,7 @@
 """
 
 import numpy as np
-from scipy import ndimage as ndi
+from scipy import ndimage
 from skimage.segmentation import watershed
 
 from inspect import isfunction
@@ -118,9 +118,9 @@ class PlateModel(object):
 
         self.stacked_field_for_watershed = self.stacked_field.copy()
 
-        self.stacked_field_for_watershed[
-            self.stacked_field_for_watershed < self.interior_quantile_value
-        ] = 0.
+        #self.stacked_field_for_watershed[
+        #    self.stacked_field_for_watershed < self.interior_quantile_value
+        #] = 0.
 
         self.markers = self.stacked_field_for_watershed < self.boundary_quantile_value
         
@@ -137,7 +137,7 @@ class PlateModel(object):
         else:
             # field is Cartesian
             if spatial_tolerance > 0.:
-                complement_markers = ndi.distance_transform_edt(
+                complement_markers = ndimage.distance_transform_edt(
                     self.stacked_field_for_watershed < self.boundary_quantile_value
                 ) > spatial_tolerance
         
@@ -148,7 +148,7 @@ class PlateModel(object):
                 )
             self.stacked_field_for_watershed /= (1. + spatial_weight)
 
-            temp_labels = ndi.label(self.markers)[0]
+            temp_labels = ndimage.label(self.markers)[0]
 
             # removing labels that have non-empty intersections
             temp_unique_labels = np.unique(temp_labels[temp_labels != 0])
@@ -162,10 +162,13 @@ class PlateModel(object):
             del temp_labels, temp_unique_labels
             self.markers = complement_markers
             
-        
+        self.markers[
+            self.stacked_field < self.interior_quantile_value
+        ] = True
+
         # filtering out micro markers
         if min_marker_size is not None:
-            temp_labels = ndi.label(self.markers)[0]
+            temp_labels = ndimage.label(self.markers)[0]
 
             # removing labels that have non-empty intersections
             temp_unique_labels = np.unique(temp_labels)
@@ -191,7 +194,7 @@ class PlateModel(object):
                 longitude_axis=longitudinal_axis
             )
 
-            labels_ext = ndi.label(markers_ext)[0]
+            labels_ext = ndimage.label(markers_ext)[0]
             plates_ext = watershed(
                 field_uint8_ext, 
                 labels_ext, 
@@ -247,7 +250,7 @@ class PlateModel(object):
                 self.plate_IDs *= -1
         else:
             # it is a Cartesian plane
-            labels = ndi.label(self.markers)[0]
+            labels = ndimage.label(self.markers)[0]
             self.plate_IDs = watershed(
                 field_uint8, 
                 labels,
