@@ -78,7 +78,10 @@ void sph_distance_transform_32bit(
                                                             // colatitude 
                                                             // to latitude
                             );
-                            if (distance < arr_out[ii*j_max + jj]) {
+                            if (
+                                (arr_out[ii*j_max + jj] == -1.f) 
+                                    || (distance < arr_out[ii*j_max + jj])
+                             ) {
                                 arr_out[ii*j_max + jj] = distance;
                             }
                         }
@@ -121,15 +124,18 @@ void sph_distance_transform_64bit(
                         if (arr_out[ii*j_max + jj] != 0.) {
                             const double distance = great_circle_angle_64bit(
                                 ((double) i)*dlon,
-                                PI_2 - ((double) j)*dlat,    // converting 
+                                PI_2 - ((double) j)*dlat,   // converting 
                                                             // colatitude 
                                                             // to latitude
                                 ((double) ii)*dlon,
-                                PI_2 - ((double) jj)*dlat    // converting 
+                                PI_2 - ((double) jj)*dlat   // converting 
                                                             // colatitude 
                                                             // to latitude
                             );
-                            if (distance < arr_out[ii*j_max + jj]) {
+                            if (
+                                (arr_out[ii*j_max + jj] == -1.) 
+                                    || (distance < arr_out[ii*j_max + jj])
+                             ) {
                                 arr_out[ii*j_max + jj] = distance;
                             }
                         }
@@ -206,7 +212,10 @@ void * sph_distance_transform_32bit_threaded_func(
                                                             // to latitude
                             );
 
-                            if (distance < targs->arr_out[ii*(targs->j_max) + jj]) {
+                            if (
+                                (targs->arr_out[ii*(targs->j_max) + jj] == -1.f)
+                                    || (distance < targs->arr_out[ii*(targs->j_max) + jj]) 
+                            ) {
                                 targs->arr_out[ii*(targs->j_max) + jj] = distance;
                             }
                         }
@@ -275,7 +284,7 @@ struct sph_distance_transform_64bit_threaded_args {
     bool *      arr;
     int64_t     i_max;
     int64_t     j_max;
-    double *      arr_out;
+    double *    arr_out;
     int64_t     i_start;        // starting i index for the thread
     int64_t     i_end;          // ending i index for the thread
     int64_t     j_start;        // starting j index for the thread
@@ -320,16 +329,19 @@ void * sph_distance_transform_64bit_threaded_func(
                         if (targs->arr_out[ii*(targs->j_max) + jj] != 0.) {
                             const double distance = great_circle_angle_64bit(
                                 ((double) i)*dlon,
-                                PI_2 - ((double) j)*dlat,    // converting 
+                                PI_2 - ((double) j)*dlat,   // converting 
                                                             // colatitude 
                                                             // to latitude
                                 ((double) ii)*dlon,
-                                PI_2 - ((double) jj)*dlat    // converting 
+                                PI_2 - ((double) jj)*dlat   // converting 
                                                             // colatitude 
                                                             // to latitude
                             );
 
-                            if (distance < targs->arr_out[ii*(targs->j_max) + jj]) {
+                            if (
+                                (targs->arr_out[ii*(targs->j_max) + jj] == -1.)
+                                 || (distance < targs->arr_out[ii*(targs->j_max) + jj]) 
+                            ) {
                                 targs->arr_out[ii*(targs->j_max) + jj] = distance;
                             }
                         }
@@ -723,11 +735,11 @@ void * sph_fused_distance_threshold_transform_64bit_threaded_func(
                             && (
                                 great_circle_angle_64bit(
                                     ((double) i)*dlon,
-                                    PI_2 - ((double) j)*dlat,    // converting 
+                                    PI_2 - ((double) j)*dlat,   // converting 
                                                                 // colatitude 
                                                                 // to latitude
                                     ((double) ii)*dlon,
-                                    PI_2 - ((double) jj)*dlat    // converting 
+                                    PI_2 - ((double) jj)*dlat   // converting 
                                                                 // colatitude 
                                                                 // to latitude
                                 ) < targs->threshold

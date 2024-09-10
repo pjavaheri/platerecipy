@@ -20,7 +20,6 @@ _platerecipy_clib_transform_mod = ctypes.CDLL(_platerecipy_clib_transform)
 
 def sph_distance_transform(
     arr: np.ndarray,
-    threshold: float,
     double_precision=True,
     num_threads=1
 ) -> np.ndarray:
