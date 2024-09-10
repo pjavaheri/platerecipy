@@ -74,6 +74,105 @@ double great_circle_angle_64bit(
 );
 
 /**
+ * Spherical distance transform on a mercator projection. This function updates 
+ * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
+ * `false` are their great circle angular distance from the closest `true`.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param arr_out a pointer to a 2D array for an output
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with -1.
+ */
+void sph_distance_transform_32bit(
+    bool * arr,
+    int32_t i_max,
+    int32_t j_max,
+    float * arr_out
+);
+
+/**
+ * Spherical distance transform on a mercator projection. This function updates 
+ * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
+ * `false` are their great circle angular distance from the closest `true`. This 
+ * function is threaded to help with the processing time.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param arr_out a pointer to a 2D array for an output
+ * @param num_threads number of threads
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with -1.
+ */
+void sph_distance_transform_32bit_threaded(
+    bool * arr,
+    int32_t i_max,
+    int32_t j_max,
+    float * arr_out,
+    int32_t num_threads
+);
+
+/**
+ * Spherical distance transform on a mercator projection. This function updates 
+ * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
+ * `false` are their great circle angular distance from the closest `true`.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param arr_out a pointer to a 2D array for an output
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with -1.
+ */
+void sph_distance_transform_64bit(
+    bool * arr,
+    int64_t i_max,
+    int64_t j_max,
+    double * arr_out
+);
+
+/**
+ * Spherical distance transform on a mercator projection. This function updates 
+ * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
+ * `false` are their great circle angular distance from the closest `true`. This 
+ * function is threaded to help with the processing time.
+ * 
+ * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
+ * @param i_max extent of `arr` along the first index
+ * @param j_max extent of `arr` along the second index
+ * @param arr_out a pointer to a 2D array for an output
+ * @param num_threads number of threads
+ * 
+ * @warning This function is intended to be called from a Python interface.
+ * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
+ * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
+ *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
+ * @warning `arr_out` must be initialized with -1.
+ */
+void sph_distance_transform_64bit_threaded(
+    bool * arr,
+    int64_t i_max,
+    int64_t j_max,
+    double * arr_out,
+    int64_t num_threads
+);
+
+
+/**
  * Spherical distance and threshold transforms on a mercator projection. This 
  * function updates `arr_out` such that all `true` in `arr` is preserved and
  * the `false` depending on whether their great circle angular distance from a 

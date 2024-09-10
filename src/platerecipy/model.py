@@ -183,12 +183,30 @@ class PlateModel(object):
             on the great circle passing through a given pair of points in radians.
 
         spatial_weight          = None,
-        num_threads             = 1,
-        min_marker_size         = None,
+
+        num_threads : int, default=1
+            Number of threads to use to perform the spherical distance transform.
+        
+        min_marker_size : int, optional
+            If provided, watershed markers will be filtered such that markers 
+            with fewer cells/pixels than `min_marker_size` will be ignored. This
+            is useful when then input field is noisy or not coherent enough.
+        
         watershed_connectivity  = 1,
         watershed_compactness   = 1.,
-        halo_quantile           = 1.,
-        halo_spatial_tolerance  = None
+
+        halo_quantile : float, default=1.
+            If `halo_spatial_tolerance` is provided, `halo_quantile` represents 
+            the value above which every nearby cell (determined by 
+            `halo_spatial_tolerance`) will be elevated. This is to enhance 
+            watershed functionality and segment recognition.
+
+            This value should be set at a greater quantile that of 
+            `boundary_quantile`.
+        
+        halo_spatial_tolerance : float, optional
+            The spatial tolerance determined by a separate distance transform 
+            (Euclidean or spherical depending on `longitudinal_axis`).
 
         """
         # normalizing the stacked fields
@@ -220,12 +238,16 @@ class PlateModel(object):
                 raise ValueError("Longitudinal axis must be either 0 or 1.")
             
             if halo_spatial_tolerance is not None:
-                halo_region = ~sphfdtt(
+                halo_region = sphfdtt(
                     self.stacked_field_for_watershed > self.halo_quantile_value, 
                     halo_spatial_tolerance,
                     num_threads=num_threads
                 )
-                self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
+                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
+                self.stacked_field_for_watershed[halo_region] *= \
+                    (1.-self.halo_quantile_value)
+                self.stacked_field_for_watershed[halo_region] += \
+                    self.halo_quantile_value
 
             if spatial_tolerance is not None:
                 complement_markers = ~sphfdtt(
@@ -238,8 +260,12 @@ class PlateModel(object):
             if halo_spatial_tolerance is not None:
                 halo_region = ndimage.distance_transform_edt(
                     self.stacked_field_for_watershed < self.halo_quantile_value
-                ) > halo_spatial_tolerance
-            self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
+                ) < halo_spatial_tolerance
+                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
+                self.stacked_field_for_watershed[halo_region] *= \
+                        (1.-self.halo_quantile_value)
+                self.stacked_field_for_watershed[halo_region] += \
+                    self.halo_quantile_value
 
             if spatial_tolerance is not None:
                 complement_markers = ndimage.distance_transform_edt(
@@ -325,12 +351,6 @@ class PlateModel(object):
                 for i in range(self.plate_IDs.shape[1]):
                     if side1_IDs[i] != side2_IDs[i]:
                         self.plate_IDs[self.plate_IDs == side2_IDs[i]] = side1_IDs[i]
-
-                raw_unified_IDs = np.unique(self.plate_IDs)
-                for i, ID in enumerate(raw_unified_IDs):
-                    self.plate_IDs[self.plate_IDs == ID] = -i
-                self.plate_IDs *= -1
-                
             else:
                 # fixing the polar condition
                 pole1_IDs = np.unique(self.plate_IDs[0, :])
@@ -348,10 +368,11 @@ class PlateModel(object):
                     if side1_IDs[i] != side2_IDs[i]:
                         self.plate_IDs[self.plate_IDs == side2_IDs[i]] = side1_IDs[i]
 
-                raw_unified_IDs = np.unique(self.plate_IDs)
-                for i, ID in enumerate(raw_unified_IDs):
-                    self.plate_IDs[self.plate_IDs == ID] = -i
-                self.plate_IDs *= -1
+            # relabeling plate IDs 
+            raw_unified_IDs = np.unique(self.plate_IDs)
+            for i, ID in enumerate(raw_unified_IDs):
+                self.plate_IDs[self.plate_IDs == ID] = -i
+            self.plate_IDs *= -1
         else:
             # it is a Cartesian plane
             labels = ndimage.label(self.markers)[0]
