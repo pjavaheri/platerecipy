@@ -1,3 +1,5 @@
+![logo](logo.png)
+
 # PLATE RECognition In PYthon
 
 by
