@@ -26,151 +26,102 @@ const double PI_2   = 1.57079632679489661923;
 const double PI_4   = 0.78539816339744830962;
 
 /**
- * Calculates the angle of separation on the great circle separating two points
- * at `(lon1, lat1)` and `(lon2, lat2)` in `float32`.
+ * Finds the spherical (geodesic) distance transform for a single plate. 
+ * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
+ * plate of interest) and `-2` (all other regions).
  * 
- * The equation used is numerically stable for all angles:
- * https://en.wikipedia.org/wiki/Great-circle_distance#Computational_formulae
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param num_points length of the array (total number of points)
+ * @param R the radius of the sphere
+ * @param arr_out for the output distances
  * 
- * @param lon1 longitude of point 1
- * @param lat1 latitude of point 1
- * @param lon2 longitude of point 2
- * @param lat2 latitude of point 2
- * 
- * @returns full angle of separation in radians
- * 
- * @warning Latitudes are measured from the equator with the domain `[-pi/2, pi/2]`.
- * 
+ * @warning `arr_out` must be initialized with `-1` for the plate of interest 
+ *          and `-2` for all other plates/regions.
  */
-float great_circle_angle_32bit(
-    float lon1,
-    float lat1,
-    float lon2,
-    float lat2
+void single_plate_interior_distance_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    int64_t     num_points,
+    double      R,
+    double *    arr_out
 );
 
 /**
- * Calculates the angle of separation on the great circle separating two points
- * at `(lon1, lat1)` and `(lon2, lat2)` in `float64`.
+ * Finds the spherical (geodesic) distance transform for all plates. 
  * 
- * The equation used is numerically stable for all angles:
- * https://en.wikipedia.org/wiki/Great-circle_distance#Computational_formulae
- * 
- * @param lon1 longitude of point 1
- * @param lat1 latitude of point 1
- * @param lon2 longitude of point 2
- * @param lat2 latitude of point 2
- * 
- * @returns full angle of separation in radians
- * 
- * @warning Latitudes are measured from the equator with the domain `[-pi/2, pi/2]`.
- * 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param plate_IDs plate IDs
+ * @param num_points length of the array (total number of points)
+ * @param R the radius of the sphere
+ * @param arr_out for the output distances
  */
-double great_circle_angle_64bit(
-    double lon1,
-    double lat1,
-    double lon2,
-    double lat2
+void full_plate_interior_distance_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    int64_t *   plate_IDs,
+    int64_t     num_points,
+    double      R,
+    double *    arr_out
 );
 
 /**
- * Spherical distance transform on a mercator projection. This function updates 
- * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
- * `false` are their great circle angular distance from the closest `true`.
+ * Finds the spherical (geodesic) distance transform for a single plate. 
+ * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
+ * plate of interest) and `-2` (all other regions).
  * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param arr_out a pointer to a 2D array for an output
- * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with -1.
- */
-void sph_distance_transform_32bit(
-    bool * arr,
-    int32_t i_max,
-    int32_t j_max,
-    float * arr_out
-);
-
-/**
- * Spherical distance transform on a mercator projection. This function updates 
- * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
- * `false` are their great circle angular distance from the closest `true`. This 
- * function is threaded to help with the processing time.
- * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param arr_out a pointer to a 2D array for an output
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param num_points length of the array (total number of points)
+ * @param R the radius of the sphere
+ * @param arr_out for the output distances
  * @param num_threads number of threads
  * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with -1.
+ * @warning `arr_out` must be initialized with `-1` for the plate of interest 
+ *          and `-2` for all other plates/regions.
  */
-void sph_distance_transform_32bit_threaded(
-    bool * arr,
-    int32_t i_max,
-    int32_t j_max,
-    float * arr_out,
-    int32_t num_threads
+void single_plate_interior_distance_transform_64bit_threaded(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    int64_t     num_points,
+    double      R,
+    double *    arr_out,
+    int64_t     num_threads
 );
 
 /**
- * Spherical distance transform on a mercator projection. This function updates 
- * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
- * `false` are their great circle angular distance from the closest `true`.
+ * Finds the spherical (geodesic) distance transform for all plates. 
  * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param arr_out a pointer to a 2D array for an output
- * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with -1.
- */
-void sph_distance_transform_64bit(
-    bool * arr,
-    int64_t i_max,
-    int64_t j_max,
-    double * arr_out
-);
-
-/**
- * Spherical distance transform on a mercator projection. This function updates 
- * `arr_out` such that all `true` in `arr` are preserved as zeros while the 
- * `false` are their great circle angular distance from the closest `true`. This 
- * function is threaded to help with the processing time.
- * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param arr_out a pointer to a 2D array for an output
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param plate_IDs plate IDs
+ * @param num_points length of the array (total number of points)
+ * @param R the radius of the sphere
+ * @param arr_out for the output distances,
  * @param num_threads number of threads
- * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with -1.
  */
-void sph_distance_transform_64bit_threaded(
-    bool * arr,
-    int64_t i_max,
-    int64_t j_max,
-    double * arr_out,
-    int64_t num_threads
+void full_plate_interior_distance_transform_64bit_threaded(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    int64_t *   plate_IDs,
+    int64_t     num_points,
+    double      R,
+    double *    arr_out,
+    int64_t     num_threads
 );
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//                    LEGACY CODE
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 /**
  * Spherical distance and threshold transforms on a mercator projection. This 
