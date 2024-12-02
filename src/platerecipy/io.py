@@ -110,7 +110,7 @@ def save_six_view_angles(
 
     for i in range(6):
         ax = axes[i][0]
-        pl = pv.Plotter()
+        pl = pv.Plotter(off_screen=True)
         pl.window_size = [800,800]
         pl.add_mesh(mesh, style='surface', line_width=4, cmap='viridis', scalars='stacked_field')
         pl.camera_position = camera_positions[i]
@@ -151,7 +151,7 @@ def save_six_view_angles(
 
     for i in range(6):
         ax = axes[i][1]
-        pl = pv.Plotter()
+        pl = pv.Plotter(off_screen=True)
         pl.window_size = [800,800]
         pl.add_mesh(mesh, style='surface', line_width=4, cmap='nipy_spectral', scalars='plate_IDs')
         pl.camera_position = camera_positions[i]
@@ -184,7 +184,7 @@ def save_six_view_angles(
 
     for i in range(6):
         ax = axes[i][2]
-        pl = pv.Plotter()
+        pl = pv.Plotter(off_screen=True)
         pl.window_size = [800,800]
         pl.add_mesh(mesh, style='surface', line_width=4, cmap='coolwarm', scalars='ID_probs')
         pl.camera_position = camera_positions[i]
