@@ -463,7 +463,7 @@ class PlateModel(object):
                     labels  = labels_ext,
                     mode    = 'bf',
                     tol     = 0.01,
-                    beta    = diffusion_beta,
+                    beta    = randomwalker_beta,
                     return_full_prob=True
                 )
             )
