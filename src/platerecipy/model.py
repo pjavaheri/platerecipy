@@ -246,7 +246,8 @@ class PlateModel(object):
         spatial_weight          = None,
         num_threads             = 1,
         min_marker_size         = None,
-        diffusion_beta          = 10.,
+        randomwalker_beta       = 100.,
+        randomwalker_tol        = 5e-3,
         halo_quantile           = 1.,
         halo_spatial_tolerance  = None
     ) -> np.ndarray:
@@ -479,8 +480,8 @@ class PlateModel(object):
                     data    = field_uint8,
                     labels  = labels,
                     mode    = 'bf',
-                    tol     = 0.01,
-                    beta    = diffusion_beta,
+                    tol     = randomwalker_tol,
+                    beta    = randomwalker_beta,
                     return_full_prob=True
                 )
             )
