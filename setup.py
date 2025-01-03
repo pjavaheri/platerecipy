@@ -24,7 +24,7 @@ platerecipy_clib_utils_module = Extension(
 
 setup(
     name = 'platerecipy',
-    version = '0.0.1',
+    version = '0.1.0',
     description = 'PLATE RECognition In PYthon',
     long_description = '',
     long_description_content_type = 'text/markdown',
@@ -38,7 +38,8 @@ setup(
         'numpy', 
         'scipy',
         'matplotlib', 
-        'scikit-image'
+        'scikit-image',
+        'pyvista'
     ],
     ext_modules = [
         platerecipy_clib_transform_module, 

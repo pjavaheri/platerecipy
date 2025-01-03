@@ -6,6 +6,18 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 \usepackage{listings}
+\usepackage[colorlinks=true, citecolor=red]{hyperref}
+
+% ~~~ references ~~~
+\usepackage[
+    backend=biber,
+    style=apa,
+    url=true, 
+    doi=true,
+    eprint=false
+]{biblatex}
+\addbibresource{manual.bib}
+% ~~~~~~~~~~~~~~~~~~
 
 % ~~~ modifying listing style ~~~
 \usepackage{xcolor}
@@ -35,6 +47,7 @@
 
 \lstset{style=mystyle}
 % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+\usepackage{soul} % highlighting
 
 \author{Pejvak Javaheri}
 \title{
@@ -45,22 +58,251 @@
 \vspace{8cm}
 }
 
-\date{\small Version 0.0.1, documentation updated on \today}
+\date{\small Version 0.1.0, documentation updated on \today}
 
 \makeindex
 \begin{document}
 \maketitle
-\newpage
-\section{Introduction}
-intro
 
 \newpage
-\section{Methods}
-intro
+\tableofcontents
+
+\newpage
+\section{Introduction}
+intro \parencite{grady2006} \textcite{grady2006} \autocite{grady2006}
+
+\newpage
+\section{Dependencies}
+Currently, \hl{Linux is the only supported platform}. Since MacOS is Unix-based, 
+\texttt{platerecipy} is expected to be installed and used without a problem.
+The main reason that Windows is not supported at this point is that there
+some functionalities are implemented in \texttt{C} and require a slightly 
+different compilation and linking procedure. Until the first release, 
+availability of \texttt{platerecipy} on Windows is not a development priority.  
+
+Concerning the \texttt{Python} dependencies, \hl{\texttt{pip} should 
+automatically install the necessary packages}. Nonetheless, the following
+includes the necessary dependencies:
+\begin{itemize}
+    \item \texttt{numpy} \parencite{numpy}: for array operations
+    \item \texttt{scipy} \parencite{scipy}: for specific scientific utilities
+    \item \texttt{matplotlib} \parencite{matplotlib}: for basic plots
+    \item \texttt{pyvista} \parencite{pyvista}: for \texttt{vtk} output and 3D visualization
+    \item \texttt{scikit-image} \parencite{scikit-image}: for a Random Walker implementation
+\end{itemize}
+In future releases, the Random Walker from \texttt{scikit-image} will
+be replaced by a \texttt{C} implementation tailored for problems that 
+\texttt{platerecipy} is designed for. Until then, the \texttt{scikit-image}
+remains as a dependency.
+
+\newpage
+\section{Installation}
+Until the packages is released on PyPI, \texttt{platerecipy} can be installed using 
+\texttt{pip} on the shell as follows:
+\begin{lstlisting}[language=bash]
+cd dist/
+python -m pip install platerecipy-?.?.?.tar.gz
+\end{lstlisting}
+where \texttt{platerecipy-?.?.?.tar.gz} is the installation tar file for the desired 
+version. Note that all \hl{installation tar files can be found in \texttt{dist} 
+subdirectory.}
+
+\newpage
+\section{Basic interface}
+\texttt{platerecipy} is developed under the notion that it must accommodate users 
+with different dataset formats and from different grid structures (e.g., spherical, 
+YinYang, icosahedral, etc.). Accordingly, as much as possible, the interface
+must refrain from assuming any format or structure specific layout to the input 
+arguments. Consequently, the trade-off of optimizing for minimal conversion burden 
+on the end user is more processing and higher memory usage. However, this extra 
+cost at the post processing is vanishingly small compared to the original cost of 
+running numerical models. 
+
+With the aforementioned principle in mind, all that is expected from the user 
+is to have access to, at least, the following arrays:
+\begin{itemize}
+    \item the Cartesian $x$, $y$, and $z$ coordinates (will refer to it as \texttt{input\_xs}, \texttt{input\_ys}, and \texttt{input\_zs}),
+    \item as well as the corresponding field values (will refer to it as \texttt{input\_field}).
+\end{itemize}
+Furthermore, though \hl{all input arrays are assumed to be \texttt{numpy}} \parencite{numpy} arrays,
+they can have any shape (flat or multidimensional).
+
+The fist step is to generate a grid:
+\begin{lstlisting}[language=Python]
+from platerecipy.grid import SphericalGrid
+
+# generating a consistent grid for interpolation
+grid = SphericalGrid(input_xs, input_ys, input_zs)
+\end{lstlisting}
+The \texttt{SphericalGrid} object is itself a derived type of a generic class 
+\texttt{Grid}, but it informs the code whether additional considerations (e.g., 
+applying the wraparound boundary condition or spherical distances) are required.
+Then, our \texttt{SphericalGrid} object is to be used to interpolate \texttt{input\_field}
+to the input points to a spherical grid. \hl{The segmentation is performed on the linearly-interpolated uniform spherical grid.} The interpolation process is 
+performed using the method \texttt{interpolate\_field}:
+\begin{lstlisting}[language=Python]
+# interpolating an input field
+field = grid.interpolate_field(input_field)
+\end{lstlisting}
+It should be noted that for input fields such as viscosity or strain-rate
+(which vary by orders of magnitude), the optional argument \texttt{take\_log}
+should be set to \texttt{True} in order to the linear interpolation is performed in the log space (and then converted back).
+
+With the \texttt{grid} object and the interpolated field \texttt{field}, we have the necessary arguments to perform plate detection. To initiate the process, a \texttt{PlateModel} object is to be constructed as follows:
+\begin{lstlisting}[language=Python]
+from platerecipy.model import PlateModel
+
+# initializing a plate model
+m = PlateModel(grid)
+\end{lstlisting}
+The newly-created object \texttt{m} carries (a pointer) to the \texttt{grid} object which includes information about the original input as well as the 
+interpolated grid structure. Though it would have been possible to keep
+interpolation under the hood (given \texttt{PlateModel} carries a \texttt{Grid} attribute), the user may want to further manipulate the 
+interpolated field before passing it for plate detection. That is why
+the two steps are kept separate. The importance of the class \texttt{PlateModel}
+is in the fundamental idea that what defines plate interior/boundary must be 
+made explicit and consistent across subsequent snapshots of the same model. The 
+\texttt{PlateModel} class has the ability to stack several fields with different
+corresponding weights and normalize the stacked field to span $[0, 1]$. Stacking 
+fields are done through the \texttt{PlateModel.stack\_field()} method as follows:
+\begin{lstlisting}[language=Python]
+# stacking the interpolated field
+m.stack_field(field)
+\end{lstlisting}
+Once again, for fields that vary by orders of magnitude, \texttt{PlateModel.stack\_field()}
+accepts an optional argument \texttt{take\_log} which if set to \texttt{True} it takes
+the logarithm to flatten the distribution. Most importantly, \hl{the stacked fields 
+are assumed to be markers of deformation such that 0 and 1 correspond to minimal 
+and maximal deformation.} For a field that is opposite of this (i.e., its high corresponds
+to low deformation and vice versa), there is an additional argument \texttt{invert} 
+which ensures the stacked field stays consistent.
+
+Once all the fields (if multiple) are stacked, the \texttt{PlateModel.find\_plates()}
+method performs segmentation:
+\begin{lstlisting}[language=Python]
+# finding plates on the stacked field
+plate_IDs = m.find_plates(
+    boundary_quantile  = 0.9,          # threshold for the boundaries 
+    # ...
+)
+\end{lstlisting}
+The \texttt{PlateModel.find\_plates()} method both returns the segmentation result, 
+and also it save them in the model object as \texttt{m.plate\_IDs} (containing segmentation IDs) 
+and \texttt{m.ID\_probs} (containing the associated probabilities).
+
+\newpage
+\section{Detailed API documentation}
+Though this guide is maintained such that with every modification the corresponding 
+section is updated, in case of any discrepancies, function docstrings are to be 
+considered the main source providing updated description. In order to access 
+docstrings, one can easily invoke \texttt{help()} command or use \texttt{?} on
+\texttt{jupyter} notebook.
+
+
+\subsection{Overall structure}
+The source code is effectively divided to two portions:
+\begin{itemize}
+    \item \texttt{src/platerecipy}: where the \texttt{Python} modules reside, and
+    \item \texttt{src/clib}: where various backend utilities are implemented in 
+    \texttt{C} for better performance.
+\end{itemize}
+
+\subsection{\texttt{grid} module}
+The \texttt{grid} module contains the necessary class and function definitions 
+for grid structure. It contains the generic \texttt{Grid} class inherited by 
+\texttt{SphericalGrid} class which has the additional attributes relevant for 
+a spherical surface. As a general rule, \hl{$\theta$ and $\phi$ correspond to polar 
+(colatitude) and azimuthal (longitude) directions.}
+
+\begin{lstlisting}[language=Python]
+class SphericalGrid(Grid):
+    """
+    Uniform spherical grid.
+    """
+
+    def __init__(
+        self,
+        original_xs  : np.ndarray,
+        original_ys  : np.ndarray,
+        original_zs  : np.ndarray,
+        theta_res    = None,
+        phi_res      = None,    
+    ) -> SphericalGrid
+        """
+        Constructs a uniform spherical grid structure. 
+        
+        If `theta_res` and `phi_res` are provided, the resolution will be 
+        determined by those values. Alternatively, the resolution close enough 
+        to what provided by the Cartesian arguments.
+
+        Warning
+        -------
+        The Cartesian arguments will be the basis upon which the class method
+        `interpolate_field()` operates. In consistent values will impact the 
+        interpolation process.
+
+        Parameters
+        ----------
+        original_xs : np.ndarray,
+            array of original input Cartesian x coordinates.
+
+        original_ys : np.ndarray,
+            array of original input Cartesian y coordinates.
+
+        original_zs : np.ndarray,
+            array of original input Cartesian z coordinates.
+        
+        theta_res : int, optional
+            polar (colatitude) resolution. 
+
+        phi_res : int, optional
+            azimuthal (longitude) resolution.
+        """
+
+    def interpolate_field(
+        self,
+        field       : np.ndarray,
+        take_log    = False
+    ) -> np.ndarray:
+        """
+        Interpolates the input field linearly for convex hull interior points and
+        closest points to the exterior.
+
+        Parameters
+        ----------
+        field : np.ndarray,
+            array corresponding to the original Cartesian coordinate inputs.
+        
+        take_log : bool, False
+            whether to perform the interpolation on the log space (suitable for
+            fields that vary by orders of magnitude), default = False.
+        
+        Returns
+        -------
+        np.ndarray
+        """
+\end{lstlisting}
+
+\subsection{\texttt{model} module}
+
+\subsection{\texttt{io} module}
+
+\subsection{\texttt{transform} module}
+
 
 \newpage
 \section{Examples}
 
 \lstinputlisting[language=Python]{../examples/basic.py}
+
+
+\newpage
+\addcontentsline{toc}{section}{References}
+\printbibliography
+
+
+\newpage
+\appendix
+\section{About the backend}
 
 \end{document}

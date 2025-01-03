@@ -1,25 +1,24 @@
-from platerecipy import grid, model, io
+from platerecipy.model import PlateModel
+from platerecipy.grid import SphericalGrid
 
-# interpolating the data onto a uniform spherical grid
-field, coords = grid.interpolate_to_spherical(
-    xs, ys, zs,                                 # Cartesian coordinates
-    edots[:,:,-1], take_log = True              # the field, changing in orders
-)                                               # of magnitude
+# generating a consistent grid for interpolation
+grid = SphericalGrid(input_xs, input_ys, input_zs)
 
-# creating an empty model
-m = model.PlateModel()
+# interpolating an input field
+field = grid.interpolate_field(input_field)
+
+# initializing a plate model
+m = PlateModel(grid)
 
 # stacking the interpolated field
 m.stack_field(field, take_log=True)
 
-# detecting plates
+# finding plates on the stacked field
 m.find_plates(
-    interior_quantile       = 0.6, 
-    wraparound_azimuthally  = True, 
-    min_marker_size         = 100
+    boundary_quantile  = 0.9,          # threshold for the boundaries 
+    # ...
 )
 
-# storing plate DIs in various formats
-io.save_as_vtp(m, other_fields=[coords[1], coords[2]], other_fields_names=['lat', 'lon'])
-io.save_as_csv(m, other_fields=[coords[1], coords[2]], other_fields_names=['lat', 'lon'])
-io.save_as_mat(m, other_fields=[coords[1], coords[2]], other_fields_names=['lat', 'lon'])
+# outputting as a ParaView readable .vtp file
+from platerecipy import io
+io.save_as_vtp(m)

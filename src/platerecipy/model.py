@@ -11,6 +11,7 @@ from skimage.segmentation import watershed, random_walker
 from inspect import isfunction
 
 from platerecipy.transform import fused_distance_threshold_transform as sphfdtt
+from platerecipy.grid import Grid, SphericalGrid
 
 def _tile_sph_surface(
     field           : np.ndarray,
@@ -156,20 +157,30 @@ def probabilities_to_plate_IDs(full_probs: np.ndarray):
 
 
 class PlateModel(object):
-    def __init__(self, coords=None) -> None:
+    def __init__(self, grid: Grid) -> None:
         self.stacked_field = None
         self.stack_weight_sum = 0.
         self._stacked_field_is_normalized = False
 
-        self.coords_not_provided = coords is None
+        self.grid = grid
+        # if a spherical grid, wraparound azimuthally 
+        self._wraparound_azimuthally = isinstance(grid, SphericalGrid)
+        self._use_spherical_distance = isinstance(grid, SphericalGrid)
+    
+    @property
+    def wraparound_azimuthally(self):
+        '''Whether to apply wraparound boundary conditions along phi (i.e., for a SphericalGrid).'''
+        return self._wraparound_azimuthally
 
-        if coords is not None:
-            R, grid_theta, grid_phi = coords
-            self.R  = R
-            self.xs = R*np.sin(grid_theta)*np.cos(grid_phi)
-            self.ys = R*np.sin(grid_theta)*np.sin(grid_phi)
-            self.zs = R*np.cos(grid_theta)
-        
+    @property
+    def use_spherical_distance(self):
+        '''Whether to apply use the great circle angle of separation instead of planar distance transform (i.e., for a SphericalGrid).'''
+        return self._use_spherical_distance
+    
+    def clear_stacked_field(self) -> None:
+        self.stacked_field = None
+        self.stack_weight_sum = 0.
+        self._stacked_field_is_normalized = False
         
 
     def stack_field(
@@ -180,19 +191,6 @@ class PlateModel(object):
         custom_function     = None,
         stack_weight        = 1.
     ) -> None:
-        
-        if self.coords_not_provided:
-            # first field stacked determines the grid
-            grid_phi, grid_theta = np.meshgrid(
-                np.linspace(-np.pi, np.pi, field.shape[0]), 
-                np.linspace(0, np.pi, field.shape[1]) # there is an issue here. incorrect phi
-            )
-            # R is assumed to be 1
-            self.R  = 1.
-            self.xs = np.sin(grid_theta)*np.cos(grid_phi)
-            self.ys = np.sin(grid_theta)*np.sin(grid_phi)
-            self.zs = np.cos(grid_theta)
-            self.coords_not_provided = False
 
         # a new field cannot be stacked if the stack is already normalized
         # (i.e., `find_plates` method has been called already)
@@ -209,7 +207,7 @@ class PlateModel(object):
 
         # taking the log for fields that change by orders of magnitude
         if take_log:
-            field = np.log10(field)
+            field = np.log(field)
         
         # normalizing the field to conform to [0,1] range
         field = (field - field.min()) / (field.max() - field.min())
@@ -218,13 +216,15 @@ class PlateModel(object):
         if invert:
             field = 1. - field
         
+        '''
         # applying a custom transformation on the array
         if custom_function is not None:
             if isfunction(custom_function):
                 field = custom_function(field)
             else:
                 raise ValueError("The custom_function must be a proper function.")
-
+        '''
+                
         # if stack is empty
         if self.stacked_field is None:
             self.stacked_field = field
@@ -239,7 +239,6 @@ class PlateModel(object):
     
     def find_plates(
         self,
-        wraparound_azimuthally  = None,
         interior_quantile       = 0.,
         boundary_quantile       = 0.9,
         spatial_tolerance       = None,
@@ -266,19 +265,6 @@ class PlateModel(object):
 
         Parameters
         ----------
-        wraparound_azimuthally : bool, optional
-            Whether axis 1 represents the longitude for the mercator 
-            projection. By inputting setting T/F, the operations are altered
-            knowing `stacked_field` is a mercator projection of a spherical
-            surface with `longitudinal_axis` representing the axis along which
-            the field wraps around the sphere (the other axis points toward the 
-            poles). 
-
-            In consequence, instead of a normal Euclidean distance transform, 
-            a spherical distance transform is used. Additionally, plate IDs will
-            we adjusted to ensure boundary conditions for a mercator projection 
-            (e.g., the plates that wrap around have the same ID).
-
         interior_quantile : float, default=0.
             The quantile that is sure to be a plate interior. Consequently, all
             values less than the value that corresponds to this quantile will be
@@ -327,6 +313,9 @@ class PlateModel(object):
             (Euclidean or spherical depending on `longitudinal_axis`).
 
         """
+        if self.stacked_field is None:
+            raise ValueError('No field is stacked for segmentation. Please use `stack_field()` method function to stack at least one field.')
+
         # normalizing the stacked fields
         self._normalize_stacked_field()
         
@@ -437,19 +426,23 @@ class PlateModel(object):
             del temp_labels, temp_unique_labels
         
         if spatial_tolerance is not None:
-            self.markers = ~sphfdtt(
-                self.xs, self.ys, self.zs,
-                ~self.markers, 
-                self.R,
-                spatial_tolerance,
-                #num_threads=num_threads
-            )
+            if self.use_spherical_distance:
+                self.markers = ~sphfdtt(
+                    self.grid.xs, self.grid.ys, self.grid.zs,
+                    ~self.markers, 
+                    self.grid.r,
+                    spatial_tolerance,
+                    #num_threads=num_threads
+                )
+            else: 
+                pass
+                # cartesian distance transform
 
 
         # converting to an 8-bit integer (i.e., pixel-like) field
         field_uint8 = (255.*self.stacked_field_for_watershed).astype(np.uint8)
 
-        if wraparound_azimuthally is not None:
+        if self.wraparound_azimuthally:
             # using tiling operation to ensure spherical boundary conditions
             markers_ext, _      = _azimuthal_extension(field=self.markers)
             labels_ext, _       = ndimage.label(markers_ext)
@@ -462,7 +455,7 @@ class PlateModel(object):
                     data    = field_uint8_ext,
                     labels  = labels_ext,
                     mode    = 'bf',
-                    tol     = 0.01,
+                    tol     = randomwalker_tol,
                     beta    = randomwalker_beta,
                     return_full_prob=True
                 )
