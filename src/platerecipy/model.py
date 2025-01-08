@@ -10,7 +10,7 @@ from skimage.segmentation import watershed, random_walker
 
 from inspect import isfunction
 
-from platerecipy.transform import fused_distance_threshold_transform as sphfdtt
+from platerecipy.transform import gridded_fused_distance_threshold_transform
 from platerecipy.grid import Grid, SphericalGrid
 
 def _tile_sph_surface(
@@ -427,12 +427,14 @@ class PlateModel(object):
         
         if spatial_tolerance is not None:
             if self.use_spherical_distance:
-                self.markers = ~sphfdtt(
-                    self.grid.xs, self.grid.ys, self.grid.zs,
+                self.markers = ~gridded_fused_distance_threshold_transform(
+                    self.grid.xs, 
+                    self.grid.ys, 
+                    self.grid.zs,
                     ~self.markers, 
                     self.grid.r,
                     spatial_tolerance,
-                    #num_threads=num_threads
+                    num_threads=num_threads
                 )
             else: 
                 pass

@@ -25,6 +25,18 @@ const double PI_2   = 1.57079632679489661923;
 // Pi / 4
 const double PI_4   = 0.78539816339744830962;
 
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//      single_plate_interior_distance_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the spherical distance 
+ * transform is to be applied on the interior of only a single plates, indicated 
+ * by the initial -1 values for plate interior and -2 values for point not on 
+ * the plate.
+ */
+
+
 /**
  * Finds the spherical (geodesic) distance transform for a single plate. 
  * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
@@ -37,34 +49,15 @@ const double PI_4   = 0.78539816339744830962;
  * @param R the radius of the sphere
  * @param arr_out for the output distances
  * 
+ * @returns 0 if no error
+ * 
  * @warning `arr_out` must be initialized with `-1` for the plate of interest 
  *          and `-2` for all other plates/regions.
  */
-void single_plate_interior_distance_transform_64bit(
+int single_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t     num_points,
-    double      R,
-    double *    arr_out
-);
-
-/**
- * Finds the spherical (geodesic) distance transform for all plates. 
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param plate_IDs plate IDs
- * @param num_points length of the array (total number of points)
- * @param R the radius of the sphere
- * @param arr_out for the output distances
- */
-void full_plate_interior_distance_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int64_t *   plate_IDs,
     int64_t     num_points,
     double      R,
     double *    arr_out
@@ -83,10 +76,12 @@ void full_plate_interior_distance_transform_64bit(
  * @param arr_out for the output distances
  * @param num_threads number of threads
  * 
+ * @returns 0 if no error
+ * 
  * @warning `arr_out` must be initialized with `-1` for the plate of interest 
  *          and `-2` for all other plates/regions.
  */
-void single_plate_interior_distance_transform_64bit_threaded(
+int single_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -94,6 +89,42 @@ void single_plate_interior_distance_transform_64bit_threaded(
     double      R,
     double *    arr_out,
     int64_t     num_threads
+);
+
+
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//       full_plate_interior_distance_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the spherical distance 
+ * transform is to be applied on the interior of all plates, indicated in the
+ * `plate_IDs` array.
+ */
+
+
+/**
+ * Finds the spherical (geodesic) distance transform for all plates. 
+ * 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param plate_IDs plate IDs
+ * @param num_points length of the array (total number of points)
+ * @param R the radius of the sphere
+ * @param arr_out for the output distances
+ * 
+ * @returns 0 if no error
+ */
+int full_plate_interior_distance_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    int64_t *   plate_IDs,
+    int64_t     num_points,
+    double      R,
+    double *    arr_out
 );
 
 /**
@@ -107,8 +138,10 @@ void single_plate_interior_distance_transform_64bit_threaded(
  * @param R the radius of the sphere
  * @param arr_out for the output distances,
  * @param num_threads number of threads
+ * 
+ * @returns 0 if no error
  */
-void full_plate_interior_distance_transform_64bit_threaded(
+int full_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -119,119 +152,116 @@ void full_plate_interior_distance_transform_64bit_threaded(
     int64_t     num_threads
 );
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//                    LEGACY CODE
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//     fused_distance_threshold_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the fused distance 
+ * transform is applied on any array of booleans. In all, the original 
+ * array `arr` must be different from the output `arr_out`.
+ */
+
 
 /**
- * Spherical distance and threshold transforms on a mercator projection. This 
- * function updates `arr_out` such that all `true` in `arr` is preserved and
- * the `false` depending on whether their great circle angular distance from a 
- * local `true` is less than `threshold` becomes a `true`.
+ * Performs a distance transform and applies a threshold transform such that 
+ * the resulting array contains `true` for all points withing the distance 
+ * of `threshold` measured from the great-circle distances on the sphere.
  * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param threshold angle of separation threshold in radians
- * @param arr_out a pointer to a 2D array for an output
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param arr initial boolean array
+ * @param i_max length of the array along the first dimension
+ * @param j_max length of the array along the second dimension
+ * @param R the radius of the sphere
+ * @param threshold distance threshold in radians
+ * @param arr_out for the output transformed boolean array
  * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with `false`.
+ * @returns 0 if no error
  */
-void sph_fused_distance_threshold_transform_32bit(
-    bool * arr,
-    int32_t i_max,
-    int32_t j_max,
-    float threshold,
-    bool * arr_out
+int fused_distance_threshold_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int64_t     num_points,
+    double      R,
+    double      threshold,
+    bool *      arr_out
+);
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//     gridded_fused_distance_threshold_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the fused distance 
+ * transform is applied on a 2D gridded array of booleans. In all, the original 
+ * array `arr` must be different from the output `arr_out`. In all these functions,
+ * all arrays are presumed to be gridded as a uniform spherical grid and have 
+ * identical shapes.
+ */
+
+
+/**
+ * Performs a distance transform and applies a threshold transform such that 
+ * the resulting array contains `true` for all points withing the distance 
+ * of `threshold` measured from the great-circle distances on the sphere.
+ * 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param arr initial 2D gridded boolean array
+ * @param i_max length of the array along the first dimension
+ * @param j_max length of the array along the second dimension
+ * @param R the radius of the sphere
+ * @param threshold distance threshold in radians
+ * @param arr_out for the output transformed boolean array
+ * 
+ * @returns 0 if no error
+ */
+int gridded_fused_distance_threshold_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int64_t     i_max,
+    int64_t     j_max,
+    double      R,
+    double      threshold,
+    bool *      arr_out
 );
 
 /**
- * Spherical distance and threshold transforms on a mercator projection. This 
- * function updates `arr_out` such that all `true` in `arr` is preserved and
- * the `false` depending on whether their great circle angular distance from a 
- * local `true` is less than `threshold` becomes a `true`. This function is
- * threaded to help with the processing time.
+ * Performs a distance transform and applies a threshold transform such that 
+ * the resulting array contains `true` for all points withing the distance 
+ * of `threshold` measured from the great-circle distances on the sphere.
+ * This is the threaded version of `gridded_fused_distance_threshold_transform_64bit`.
  * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param threshold angle of separation threshold in radians
- * @param arr_out a pointer to a 2D array for an output
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param arr initial 2D gridded boolean array
+ * @param i_max length of the array along the first dimension
+ * @param j_max length of the array along the second dimension
+ * @param R the radius of the sphere
+ * @param threshold distance threshold in radians
+ * @param arr_out for the output transformed boolean array
  * @param num_threads number of threads
  * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with `false`.
+ * @returns 0 if no error
  */
-void sph_fused_distance_threshold_transform_32bit_threaded(
-    bool * arr,
-    int32_t i_max,
-    int32_t j_max,
-    float threshold,
-    bool * arr_out,
-    int32_t num_threads
-);
-
-/**
- * Spherical distance and threshold transforms on a mercator projection. This 
- * function updates `arr_out` such that all `true` in `arr` is preserved and
- * the `false` depending on whether their great circle angular distance from a 
- * local `true` is less than `threshold` becomes a `true`. This version is 
- * double precision.
- * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param threshold angle of separation threshold in radians
- * @param arr_out a pointer to a 2D array for an output
- * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with `false`.
- */
-void sph_fused_distance_threshold_transform_64bit(
-    bool * arr,
-    int64_t i_max,
-    int64_t j_max,
-    double threshold,
-    bool * arr_out
-);
-
-/**
- * Spherical distance and threshold transforms on a mercator projection. This 
- * function updates `arr_out` such that all `true` in `arr` is preserved and
- * the `false` depending on whether their great circle angular distance from a 
- * local `true` is less than `threshold` becomes a `true`. This version is 
- * double precision. This function is threaded to help with the processing time.
- * 
- * @param arr a pointer to a 2D array of shape `i_max` by `j_max`
- * @param i_max extent of `arr` along the first index
- * @param j_max extent of `arr` along the second index
- * @param threshold angle of separation threshold in radians
- * @param arr_out a pointer to a 2D array for an output
- * @param num_threads number of threads
- * 
- * @warning This function is intended to be called from a Python interface.
- * @warning Both `arr` and `arr_out` are considered to be row-major arrays.
- * @warning `i` and `j` in `arr` and `arr_out` are uniformly spaced longitudes
- *          and latitudes. It is assumed that extent is `[0,2pi]x[0,pi]`.
- * @warning `arr_out` must be initialized with `false`.
- */
-void sph_fused_distance_threshold_transform_64bit_threaded(
-    bool * arr,
-    int64_t i_max,
-    int64_t j_max,
-    double threshold,
-    bool * arr_out,
-    int64_t num_threads
+int gridded_fused_distance_threshold_transform_64bit_threaded(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int64_t     i_max,
+    int64_t     j_max,
+    double      R,
+    double      threshold,
+    bool *      arr_out,
+    int64_t     num_threads
 );
 
 #endif

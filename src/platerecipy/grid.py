@@ -151,7 +151,7 @@ class Grid(object):
     """
     Generic class for a grid structure.
     """
-    def __init__(self) -> Grid:
+    def __init__(self):
         '''Construct a generic grid structure.'''
         self._xs = None
         self._ys = None
@@ -189,7 +189,7 @@ class SphericalGrid(Grid):
         original_zs  : np.ndarray,
         theta_res    = None,
         phi_res      = None,    
-    ) -> SphericalGrid:
+    ):
         """
         Constructs a uniform spherical grid structure. 
         
