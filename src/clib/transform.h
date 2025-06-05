@@ -58,7 +58,7 @@ int single_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double *    arr_out
 );
@@ -85,10 +85,10 @@ int single_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double *    arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 );
 
 
@@ -121,8 +121,8 @@ int full_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t *   plate_IDs,
-    int64_t     num_points,
+    int32_t *   plate_IDs,
+    int32_t     num_points,
     double      R,
     double *    arr_out
 );
@@ -145,11 +145,11 @@ int full_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t *   plate_IDs,
-    int64_t     num_points,
+    int32_t *   plate_IDs,
+    int32_t     num_points,
     double      R,
     double *    arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 );
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -184,7 +184,7 @@ int fused_distance_threshold_transform_64bit(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double      threshold,
     bool *      arr_out
@@ -225,8 +225,8 @@ int gridded_fused_distance_threshold_transform_64bit(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     i_max,
-    int64_t     j_max,
+    int32_t     i_max,
+    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out
@@ -256,12 +256,12 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     i_max,
-    int64_t     j_max,
+    int32_t     i_max,
+    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 );
 
 #endif

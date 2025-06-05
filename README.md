@@ -1,13 +1,16 @@
 ![logo](logo.png)
 
 # `platerecipy`: a package for PLATE RECognition In PYthon
+`platerecipy` is a tool for detecting candidate plates on global geophysical 
+datasets. It analyzes the surface to identify diffuse and non-conforming regions, 
+as well as regions with low confidence in plate assignment.
 
 ## Supported platforms
 
-Though `platerecipy` is fundamentally a Python package, it also relies on 
-backend functionalities that are implemented in C. Typically, Windows compared 
+Though `platerecipy` is fundamentally a `Python` package, it also relies on 
+backend functionalities that are implemented in `C`. Typically, Windows compared 
 to Linux requires a slightly different compilation and linking which at this 
-stage is not supported. That is why, currently, the only supported platform is Linux.
+stage is not supported. That is why, currently, Linux is the only supported platform.
 
 ## Installation
 
@@ -32,6 +35,11 @@ As a demonstration, assuming a given `input_xs`, `input_ys`, `input_zs`, and
 from platerecipy.model import PlateModel
 from platerecipy.grid import SphericalGrid
 
+input_xs    = # to be specified ...
+input_ys    = # to be specified ...
+input_zs    = # to be specified ...
+input_field = # to be specified ...
+
 # generating a consistent grid for interpolation
 grid = SphericalGrid(input_xs, input_ys, input_zs)
 
@@ -46,8 +54,10 @@ m.stack_field(field, take_log=True)
 
 # finding plates on the stacked field
 m.find_plates(
-    boundary_quantile  = 0.9,          # threshold for the boundaries 
-    # ...
+    boundary_quantile     = 0.9,            # threshold for the boundaries 
+    separation_tolerance  = 4*3.1416/180.,  # 4 degrees for separation tolerance
+    RW_beta               = 200,            # RW beta (for feature sharpness)
+    min_marker_size       = 100             # to filter out micro plates
 )
 
 # outputting as a ParaView readable .vtp file

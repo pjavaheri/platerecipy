@@ -21,7 +21,7 @@ int single_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double *    arr_out
 ) {
@@ -70,12 +70,12 @@ struct plate_interior_distance_transform_64bit_threaded_args {
     double *    xs;
     double *    ys;
     double *    zs;
-    int64_t *   plate_IDs;
-    int64_t     num_points;
+    int32_t *   plate_IDs;
+    int32_t     num_points;
     double      R;
     double *    arr_out;
-    int64_t     num_threads;
-    int64_t     i_thread;
+    int32_t     num_threads;
+    int32_t     i_thread;
 };
 
 /**
@@ -141,10 +141,10 @@ int single_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double *    arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 ) {
     pthread_t tids[num_threads];
     struct plate_interior_distance_transform_64bit_threaded_args targss[num_threads];
@@ -189,11 +189,15 @@ int full_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t *   plate_IDs,
-    int64_t     num_points,
+    int32_t *   plate_IDs,
+    int32_t     num_points,
     double      R,
     double *    arr_out
 ) {
+    FILE * f = fopen("stdout.txt", "w");
+    fprintf(f, "in C: num_points = %d\n", num_points);
+    fclose(f);
+
     // first, only working with Cartesian distance
     const double ONE_OVER_TWO_R_SQUARED = 1./(2.*R*R);
     const double MAX_CARTESIAN_DISTANCE = 4.*R*R;
@@ -230,12 +234,6 @@ int full_plate_interior_distance_transform_64bit(
 void * full_plate_interior_distance_transform_64bit_threaded_func(
     void * args
 ) {
-    /**
-     * Assumes that plate_IDs are initialized with -1. and 0. :
-     *      -> -1. corresponds to the plate of interest
-     *      -> -2. corresponds to other plates
-     */
-
     struct plate_interior_distance_transform_64bit_threaded_args * targs =
         (struct plate_interior_distance_transform_64bit_threaded_args *) args;
     
@@ -281,11 +279,11 @@ int full_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
-    int64_t *   plate_IDs,
-    int64_t     num_points,
+    int32_t *   plate_IDs,
+    int32_t     num_points,
     double      R,
     double *    arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 ) {
     pthread_t tids[num_threads];
     struct plate_interior_distance_transform_64bit_threaded_args targss[num_threads];
@@ -332,14 +330,13 @@ int fused_distance_threshold_transform_64bit(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     num_points,
+    int32_t     num_points,
     double      R,
     double      threshold,
     bool *      arr_out
 ) {
     // first, only working with Cartesian distance
     const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
-    const double MAX_CARTESIAN_DISTANCE = 4.*R*R;
     
     for (int i = 0; i < num_points; i++) {
         if (arr[i]) {
@@ -378,16 +375,18 @@ int gridded_fused_distance_threshold_transform_64bit(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     i_max,
-    int64_t     j_max,
+    int32_t     i_max,
+    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out
 ) {
+    // as a spherical grid, the first and last columns are the same
+
     // first, only working with Cartesian distance
     const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
     
-    const double dlat = PI / ((double) i_max); 
+    const double dlat = PI / ((double) (i_max - 1)); 
     const int di = (int) (threshold / dlat) + 2;        // +2 for a conservative
 
     for (int i = 0; i < i_max; i++) {
@@ -421,7 +420,11 @@ int gridded_fused_distance_threshold_transform_64bit(
                 }
             }    
         }
+
+        // the first and last columns are the same
+        //arr_out[i*j_max + (j_max-1)] = arr_out[i*j_max];
     }
+
     return 0;
 }
 
@@ -437,13 +440,13 @@ struct gridded_fused_distance_threshold_transform_64bit_threaded_args {
     double *    ys;
     double *    zs;
     bool *      arr;
-    int64_t     i_max;
-    int64_t     j_max;
+    int32_t     i_max;
+    int32_t     j_max;
     double      R;
     double      threshold;
     bool *      arr_out;
-    int64_t     num_threads;
-    int64_t     i_thread;
+    int32_t     num_threads;
+    int32_t     i_thread;
 };
 
 /**
@@ -471,6 +474,8 @@ void * gridded_fused_distance_threshold_transform_64bit_threaded_func(
     if (targs->i_thread == targs->num_threads - 1) {
         i_end = targs->i_max;
     }
+
+    // as a spherical grid, the first and last columns are the same
 
     // first, only working with Cartesian distance
     const double THRESHOLD_D_SQUARED = 2.*targs->R*targs->R*(1. - cos(targs->threshold));
@@ -509,7 +514,12 @@ void * gridded_fused_distance_threshold_transform_64bit_threaded_func(
                 }
             }    
         }
+
+        // the first and last columns are the same
+        //targs->arr_out[i*targs->j_max + (targs->j_max-1)] = 
+        //        targs->arr_out[i*targs->j_max];
     }
+
     return NULL;
 }
 
@@ -519,12 +529,12 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
     double *    ys,
     double *    zs,
     bool *      arr,
-    int64_t     i_max,
-    int64_t     j_max,
+    int32_t     i_max,
+    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out,
-    int64_t     num_threads
+    int32_t     num_threads
 ) {
     pthread_t tids[num_threads];
     struct gridded_fused_distance_threshold_transform_64bit_threaded_args targss[num_threads];

@@ -4,160 +4,100 @@
 @brief Module for model object and functions.
 """
 
+import logging
+log = logging.getLogger(__name__)
+
 import numpy as np
 from scipy import ndimage
-from skimage.segmentation import watershed, random_walker
 
-from inspect import isfunction
+from .transform import gridded_fused_distance_threshold_transform
+from .segmentation import random_walker
+from .grid import Grid, SphericalGrid
+from . import _FLOAT
 
-from platerecipy.transform import gridded_fused_distance_threshold_transform
-from platerecipy.grid import Grid, SphericalGrid
 
-def _tile_sph_surface(
-    field           : np.ndarray,
-    longitude_axis  : int
-):
-    if longitude_axis == 0:
-        # the first index wraps around the sphere
-        ni, nj = field.shape
-
-        field_ext = np.zeros((3*ni, 3*nj), dtype=field.dtype)
-        
-        field_ext[     :   ni,      :   nj] = field[:, ::-1]
-        field_ext[  ni : 2*ni,      :   nj] = field[:, ::-1]
-        field_ext[2*ni : 3*ni,      :   nj] = field[:, ::-1]
-
-        field_ext[     :   ni,   nj : 2*nj] = field[:, :]
-        field_ext[  ni : 2*ni,   nj : 2*nj] = field[:, :]
-        field_ext[2*ni : 3*ni,   nj : 2*nj] = field[:, :]
-
-        field_ext[     :   ni, 2*nj : 3*nj] = field[:, ::-1]
-        field_ext[  ni : 2*ni, 2*nj : 3*nj] = field[:, ::-1]
-        field_ext[2*ni : 3*ni, 2*nj : 3*nj] = field[:, ::-1]
-
-        field = field_ext
-
-    elif longitude_axis == 1:
-        # the second index wraps around the sphere
-        ni, nj = field.shape
-
-        field_ext = np.zeros((3*ni, 3*nj), dtype=field.dtype)
-        
-        field_ext[     :   ni,      :   nj] = field[::-1, :]
-        field_ext[     :   ni,   nj : 2*nj] = field[::-1, :]
-        field_ext[     :   ni, 2*nj : 3*nj] = field[::-1, :]
-        
-        field_ext[  ni : 2*ni,      :   nj] = field[:, :]
-        field_ext[  ni : 2*ni,   nj : 2*nj] = field[:, :]
-        field_ext[  ni : 2*ni, 2*nj : 3*nj] = field[:, :]
-        
-        field_ext[2*ni : 3*ni,      :   nj] = field[::-1, :]
-        field_ext[2*ni : 3*ni,   nj : 2*nj] = field[::-1, :]
-        field_ext[2*ni : 3*ni, 2*nj : 3*nj] = field[::-1, :]
-
-        field = field_ext
-        
-    else:
-        raise ValueError("unification_axis can be either None, 0, or 1.")
-
-    return field_ext
-
-def _azimuthal_extension(
-    field       : np.ndarray,
-    ext_frac    = 0.25
-) -> np.ndarray:
+def _unify_wraparound_labels(labels: np.ndarray) -> np.ndarray:
     """
-    Parameter
-    ---------
+    Ensures marker labels conform to the azimuthal continuity (i.e., wraparound
+    boundary condition).
+
+    Parameters
+    ----------
+    labels : np.ndarray,
+        A 2D integer array with labels positive integers and unmarked regions 
+        zeros.
 
     Returns
     -------
+    np.ndarray
 
+    Warning
+    -------
+    The input array, `labels`, will be modified, but the modification is not 
+    guaranteed to be sequential. `_make_labels_sequential()` should be called 
+    subsequently.
 
     Warning
     -------
     It is assumed that the first dimension corresponds to theta (polar angle) 
     and the second to phi (azimuthal angle).
     """
-    ni, nj = field.shape
-    dj = int(ext_frac * nj) # number of vertical stripes to be extended on each side
-
-    field_ext = np.zeros((ni, nj + 2*dj), dtype=field.dtype)
-
-    field_ext[:,            : dj     ]         = field[:, -dj:]
-    field_ext[:, dj      : dj + nj]       = field[:, :]
-    field_ext[:, dj + nj : ] = field[:, :dj]
+    for i in range(labels.shape[0]):
+        if labels[i, 0] > 0 and labels[i, -1] > 0:
+            labels[labels == labels[i, -1]] = labels[i, 0]
     
-    return field_ext, dj
+    return labels
 
-def _unify_extended_IDs(
-    plate_IDs       : np.ndarray,
-    dj : int
-) -> np.ndarray:
+def _make_labels_sequential(labels: np.ndarray) -> np.ndarray:
     """
-    Parameter
-    ---------
+    Ensures marker labels are sequential and no gaps between positive IDs.
+
+    Parameters
+    ----------
+    labels : np.ndarray,
+        A 2D integer array with labels positive integers and unmarked regions 
+        zeros.
 
     Returns
     -------
+    np.ndarray
 
-
+    Warning
+    -------
+    The input array, `labels`, will be modified, but the modification is not 
+    guaranteed to be sequential. `_make_labels_sequential()` should be called 
+    subsequently.
+    
     Warning
     -------
     It is assumed that the first dimension corresponds to theta (polar angle) 
     and the second to phi (azimuthal angle).
-
-    THIS NEEDS TO BE FIXED SINCE PLATE_IDS IS MUTABLE AND CHANGES
     """
-    # applying the wraparound boundary condition
-    ni, nj = plate_IDs.shape[0], plate_IDs.shape[1]
-    nj -= 2*dj
-
-    for i in range(ni):
-        if (plate_IDs[i, dj - 2] == plate_IDs[i, dj]) \
-            and (plate_IDs[i, dj - 1] == plate_IDs[i, dj]):
-            plate_IDs[
-                plate_IDs == plate_IDs[i, dj + nj -1]
-            ] = plate_IDs[i, dj]
-        
-        if (plate_IDs[i, dj + nj + 1] == plate_IDs[i, dj + nj - 1]) \
-            and (plate_IDs[i, dj + nj] == plate_IDs[i, dj + nj - 1]):
-            plate_IDs[
-                plate_IDs == plate_IDs[i, dj]
-            ] = plate_IDs[i, dj + nj -1]
-
-    plate_IDs = plate_IDs[:, dj: dj + nj]
+    unique_labels = np.unique(labels)
+    unique_labels = unique_labels[unique_labels != 0]
     
-    raw_unified_IDs = np.unique(plate_IDs)
-    for i, ID in enumerate(raw_unified_IDs):
-        plate_IDs[plate_IDs == ID] = -(i+1) # IDs start by 1
-    plate_IDs *= -1
-
-    return plate_IDs
-
-def probabilities_to_plate_IDs(full_probs: np.ndarray):
-    if full_probs.shape[2] == 1:
-        # no plates found
-        plate_IDs   = np.zeros((full_probs.shape[0], full_probs.shape[1]), dtype=int)
-        probs       = np.zeros((full_probs.shape[0], full_probs.shape[1]), dtype=np.float64)
-    else:
-        _, i_max, j_max = full_probs.shape
-        plate_IDs   = np.zeros((i_max, j_max), dtype=int)
-        probs       = np.zeros((i_max, j_max), dtype=np.float64)
-
-        for i in range(i_max):
-            for j in range(j_max):
-                prob_vec        = full_probs[:, i, j]
-                most_likely_ID  = np.argmax(prob_vec) + 1
-                plate_IDs[i, j] = most_likely_ID
-                probs[i, j]     = prob_vec[most_likely_ID - 1]
-        
-    return plate_IDs, probs
+    for i in range(unique_labels.size):
+        labels[labels==unique_labels[i]] = i+1
+    
+    return labels
 
 
 
 class PlateModel(object):
+    """
+    A class for defining plate detection parameters, field stacking, 
+    and performing segmentation.
+    """
+
     def __init__(self, grid: Grid) -> None:
+        """
+        Create a `PlateModel` object by initializing it using a `Grid`.
+
+        Parameters
+        ----------
+        grid : Grid,
+            An instance of a grid 
+        """
         self.stacked_field = None
         self.stack_weight_sum = 0.
         self._stacked_field_is_normalized = False
@@ -178,6 +118,9 @@ class PlateModel(object):
         return self._use_spherical_distance
     
     def clear_stacked_field(self) -> None:
+        """
+        To reset and clear the stacked field.
+        """
         self.stacked_field = None
         self.stack_weight_sum = 0.
         self._stacked_field_is_normalized = False
@@ -188,9 +131,25 @@ class PlateModel(object):
         field               : np.ndarray,
         invert              = False,
         take_log            = False,
-        custom_function     = None,
         stack_weight        = 1.
     ) -> None:
+        """
+        Stack a new field by normalizing the field values.
+
+        Parameters
+        ----------
+        field : np.ndarray,
+            The field to be stacked.
+            
+        invert : bool, default=False,
+            If increase in input `field` corresponds to a decrease in deformation.
+        
+        take_log : bool, default=False,
+            If the input `field` varies by orders of magnitude.
+
+        stack_weight : float, default=1.,
+            The corresponding weight when stacked (between 0 and 1).
+        """
 
         # a new field cannot be stacked if the stack is already normalized
         # (i.e., `find_plates` method has been called already)
@@ -200,6 +159,9 @@ class PlateModel(object):
                 normalized. Ensure all necessary fields are stacked prior to \
                 calling `find_plates`."
             )
+        
+        # enforcing row-major structure
+        field = field.astype(order='C', dtype=_FLOAT, copy=False)
 
         # adding the partial weight for normalization
         self.stack_weight_sum += stack_weight
@@ -215,15 +177,6 @@ class PlateModel(object):
         # ensuring highs represent plate boundaries
         if invert:
             field = 1. - field
-        
-        '''
-        # applying a custom transformation on the array
-        if custom_function is not None:
-            if isfunction(custom_function):
-                field = custom_function(field)
-            else:
-                raise ValueError("The custom_function must be a proper function.")
-        '''
                 
         # if stack is empty
         if self.stacked_field is None:
@@ -236,25 +189,27 @@ class PlateModel(object):
             self.stacked_field *= (1./self.stack_weight_sum)
             self._stacked_field_is_normalized = True
 
+    # a reset stacked field to be added
     
     def find_plates(
         self,
-        interior_quantile       = 0.,
         boundary_quantile       = 0.9,
-        spatial_tolerance       = None,
-        spatial_weight          = None,
+        boundary_absolute       = 1.0,
+        separation_tolerance    = None,
         num_threads             = 1,
         min_marker_size         = None,
-        randomwalker_beta       = 100.,
-        randomwalker_tol        = 5e-3,
-        halo_quantile           = 1.,
-        halo_spatial_tolerance  = None
+        preserve_small_markers  = False,
+        identify_nonconforming  = False,
+        RW_beta                 = 100.,
+        RW_solver_tolerance     = 1e-3,
+        RW_solver               = 'LU',
+        return_IDs              = True
     ) -> np.ndarray:
         """
         Applies segmentation on `stacked_field` and returns an integer array of 
         the same shape with each cell carrying the plate ID (i.e., segment
         number). This function can be called multiple times from the same object
-        instance as it does not alter 
+        instance as it does not alter `stacked_field`.
         
         Warning
         -------
@@ -263,30 +218,34 @@ class PlateModel(object):
         input parameters regardless of their apparent relevance to the specific 
         task at hand.
 
+        Warning
+        -------
+        If both `boundary_quantile` and `boundary_absolute` are specified, a 
+        node qualifies as a possible boundary point so long as it satisfies one 
+        of the two conditions.
+
         Parameters
         ----------
-        interior_quantile : float, default=0.
-            The quantile that is sure to be a plate interior. Consequently, all
-            values less than the value that corresponds to this quantile will be
-            replaced with 0. It is suggested to leave this option at 0 (default).
-        
         boundary_quantile : float, default=0.9
             The quantile that represents values above which that are presumed to 
+            feature plate boundaries.
+        
+        boundary_absolute : float, default=1.0
+            The absolute value that represents values above which that are 
+            presumed to feature plate boundaries.
 
-        spatial_tolerance : float, optional
+        separation_tolerance : float, optional
             Whether to use a distance transform and consider regions with 
-            distances less than `spatial_tolerance` from the boundary (determined
+            distances less than `separation_tolerance` from the boundary (determined
             by `boundary_quantile`) as a part of the boundary as well. This 
             option is useful when segments (plates) have imperfect boundaries 
-            that require some spatial tolerance to close them.
+            that require some separation tolerance to close them.
 
-            If `longitudinal_axis` is provided, it is presumed that the field 
+            For a `SphericalGrid`, it is presumed that the field 
             is a mercator projection and instead of a Euclidean distance 
             transform, a spherical one will be applied. In that case, 
-            `spatial_tolerance` will be considered as the angle of tolerance 
+            `separation_tolerance` will be considered as the angle of tolerance 
             on the great circle passing through a given pair of points in radians.
-
-        spatial_weight          = None,
 
         num_threads : int, default=1
             Number of threads to use to perform the spherical distance transform.
@@ -295,23 +254,30 @@ class PlateModel(object):
             If provided, watershed markers will be filtered such that markers 
             with fewer cells/pixels than `min_marker_size` will be ignored. This
             is useful when then input field is noisy or not coherent enough.
+
+        preserve_small_markers : bool, default=False
+            Whether to reinstate small markers obscured by by the separation
+            tolerance step.
+
+        identify_non_conforming : bool, default=False
+            Whether to extract and separately label non-conforming regions 
+            defined by featuring a stacked field greater than 0.5 and a ID 
+            probability less than 0.5 with ID=0.
+
+        RW_beta : float, default=100.
+            Gaussian beta parameter for random walker connection weights. This 
+            parameter controls the sharpness of the boundaries.
         
-        watershed_connectivity  = 1,
-        watershed_compactness   = 1.,
-
-        halo_quantile : float, default=1.
-            If `halo_spatial_tolerance` is provided, `halo_quantile` represents 
-            the value above which every nearby cell (determined by 
-            `halo_spatial_tolerance`) will be elevated. This is to enhance 
-            watershed functionality and segment recognition.
-
-            This value should be set at a greater quantile that of 
-            `boundary_quantile`.
+        RW_solver_tolerance : float, default=1e-3
+            Tolerance value for the choice of solver that requires a tolerance
+            (e.g., if `RW_solver = 'CG'`).
         
-        halo_spatial_tolerance : float, optional
-            The spatial tolerance determined by a separate distance transform 
-            (Euclidean or spherical depending on `longitudinal_axis`).
-
+        RW_solver : str, default='LU'
+            Numerical solver used to obtain an random walker probability solution.
+            Possible choices: 'direct', 'LU', 'CG', or 'FA'.
+        
+        return_IDs : bool, default=True
+            Whether to return a copy of `self.plate_IDs`.
         """
         if self.stacked_field is None:
             raise ValueError('No field is stacked for segmentation. Please use `stack_field()` method function to stack at least one field.')
@@ -319,99 +285,19 @@ class PlateModel(object):
         # normalizing the stacked fields
         self._normalize_stacked_field()
         
-        
-        self.boundary_quantile_value, \
-            self.interior_quantile_value, \
-            self.halo_quantile_value = np.quantile(
+        self.boundary_quantile_value = np.quantile(
             self.stacked_field, 
-            [boundary_quantile, interior_quantile, halo_quantile]
+            [boundary_quantile]
         )
 
+        self.boundary_absolute = boundary_absolute
+
         # operating on a separate copy
-        self.stacked_field_for_watershed = self.stacked_field.copy()
-
-        # forcing specific regions to be an interior, and thus, show up as a marker
-        # it is suggested not to be used!
-        if interior_quantile > 0.:
-            self.stacked_field_for_watershed[
-                self.stacked_field_for_watershed < self.interior_quantile_value
-            ] = 0.
-
-        self.markers = self.stacked_field_for_watershed < self.boundary_quantile_value
+        self.stacked_field_for_segmentation = self.stacked_field.copy()
         
-        '''
-        if wraparound_azimuthally is not None:
-            # field is spherical
-            
-            if halo_spatial_tolerance is not None:
-                halo_region = sphfdtt(
-                    self.xs, self.ys, self.zs,
-                    self.stacked_field_for_watershed > self.halo_quantile_value, 
-                    self.R,
-                    halo_spatial_tolerance,
-                    #num_threads=num_threads
-                )
-                #halo_region = sphfdtt(
-                #    self.stacked_field_for_watershed > self.halo_quantile_value, 
-                #    halo_spatial_tolerance,
-                #    num_threads=num_threads
-                #)
-                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
-                self.stacked_field_for_watershed[halo_region] *= \
-                    (1.-self.halo_quantile_value)
-                self.stacked_field_for_watershed[halo_region] += \
-                    self.halo_quantile_value
-
-            if spatial_tolerance is not None:
-                complement_markers = ~sphfdtt(
-                    self.xs, self.ys, self.zs,
-                    self.stacked_field_for_watershed > self.boundary_quantile_value, 
-                    self.R,
-                    spatial_tolerance,
-                    #num_threads=num_threads
-                )
-        else:
-            # field is Cartesian
-            if halo_spatial_tolerance is not None:
-                halo_region = ndimage.distance_transform_edt(
-                    self.stacked_field_for_watershed < self.halo_quantile_value
-                ) < halo_spatial_tolerance
-                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
-                self.stacked_field_for_watershed[halo_region] *= \
-                        (1.-self.halo_quantile_value)
-                self.stacked_field_for_watershed[halo_region] += \
-                    self.halo_quantile_value
-
-            if spatial_tolerance is not None:
-                complement_markers = ndimage.distance_transform_edt(
-                    self.stacked_field_for_watershed < self.boundary_quantile_value
-                ) > spatial_tolerance
+        self.markers = (self.stacked_field_for_segmentation < self.boundary_quantile_value) \
+            & (self.stacked_field_for_segmentation < self.boundary_absolute)
         
-
-        if spatial_tolerance is not None:
-
-            # whether to also elevate the region near the boundary
-            # it is suggested not to be used! 
-            if spatial_weight is not None:
-                self.stacked_field_for_watershed += spatial_weight*(
-                        (~complement_markers).astype(self.stacked_field.dtype)
-                    )
-                self.stacked_field_for_watershed *= 1./(1. + spatial_weight)
-
-            temp_labels = ndimage.label(self.markers)[0]
-
-            # removing labels that have non-empty intersections
-            temp_unique_labels = np.unique(temp_labels[temp_labels != 0])
-
-            for label in temp_unique_labels:
-                if np.all(complement_markers[temp_labels == label] == False):
-                    # a new valid region is found which was overwhelmed by the
-                    # spatial tolerance
-                    complement_markers[temp_labels == label] = True
-            
-            del temp_labels, temp_unique_labels
-            self.markers = complement_markers
-        '''
         # filtering out micro markers
         if min_marker_size is not None:
             temp_labels = ndimage.label(self.markers)[0]
@@ -425,328 +311,63 @@ class PlateModel(object):
             
             del temp_labels, temp_unique_labels
         
-        if spatial_tolerance is not None:
+        if preserve_small_markers:
+            temp_pre_labels = ndimage.label(self.markers)[0]
+            if self.wraparound_azimuthally:
+                _unify_wraparound_labels(temp_pre_labels)
+        
+        if separation_tolerance is not None:
             if self.use_spherical_distance:
+                # separation_tolerance is treated as radians on the great-circle
                 self.markers = ~gridded_fused_distance_threshold_transform(
-                    self.grid.xs, 
-                    self.grid.ys, 
-                    self.grid.zs,
-                    ~self.markers, 
-                    self.grid.r,
-                    spatial_tolerance,
-                    num_threads=num_threads
+                    xs          = self.grid.xs, 
+                    ys          = self.grid.ys, 
+                    zs          = self.grid.zs,
+                    arr         = ~self.markers, 
+                    R           = self.grid.r,
+                    threshold   = separation_tolerance,
+                    num_threads = num_threads
                 )
             else: 
                 pass
-                # cartesian distance transform
+                # planar distance transform with the separation_tolerance treated 
+                # as the distance in terms of unit grid spacing
+                self.markers = ~(
+                    ndimage.distance_transform_edt(
+                        input=~self.markers
+                    ) < separation_tolerance
+                )
+        
+        if preserve_small_markers:
+            temp_unique_labels = np.unique(temp_pre_labels)
+            temp_unique_labels = temp_unique_labels[temp_unique_labels>0]
+            
+            for label in temp_unique_labels:
+                temp_mask = (temp_pre_labels == label)
+                if not np.any(self.markers[temp_mask]):
+                    self.markers[temp_mask] = True
 
 
-        # converting to an 8-bit integer (i.e., pixel-like) field
-        field_uint8 = (255.*self.stacked_field_for_watershed).astype(np.uint8)
-
+        
+        labels, _ = ndimage.label(self.markers)
+        
         if self.wraparound_azimuthally:
-            # using tiling operation to ensure spherical boundary conditions
-            markers_ext, _      = _azimuthal_extension(field=self.markers)
-            labels_ext, _       = ndimage.label(markers_ext)
-            field_uint8_ext, dj = _azimuthal_extension(field=field_uint8)
-
-            print(f"in find plates: field_uint8_ext.shape={field_uint8_ext.shape}, labels_ext.shape={labels_ext.shape} ")
-            
-            plate_IDs_ext, ID_probs_ext = probabilities_to_plate_IDs(
-                random_walker(
-                    data    = field_uint8_ext,
-                    labels  = labels_ext,
-                    mode    = 'bf',
-                    tol     = randomwalker_tol,
-                    beta    = randomwalker_beta,
-                    return_full_prob=True
-                )
-            )
-            print(f"in find plates: plate_IDs_ext.shape={plate_IDs_ext.shape}, ID_probs_ext.shape={ID_probs_ext.shape} ")
-
-            self.plate_IDs = _unify_extended_IDs(plate_IDs_ext, dj)
-            self.ID_probs = ID_probs_ext[:, dj: plate_IDs_ext.shape[1] - dj]
-
-        else:
-            # it is a Cartesian plane
-            labels, _ = ndimage.label(self.markers)
-            self.plate_IDs, self.ID_probs = probabilities_to_plate_IDs(
-                random_walker(
-                    data    = field_uint8,
-                    labels  = labels,
-                    mode    = 'bf',
-                    tol     = randomwalker_tol,
-                    beta    = randomwalker_beta,
-                    return_full_prob=True
-                )
-            )
-            
-        return self.plate_IDs.copy()
-
-
-
-    def find_plates_legacy(
-        self,
-        longitudinal_axis       = None,
-        interior_quantile       = 0.,
-        boundary_quantile       = 0.9,
-        spatial_tolerance       = None,
-        spatial_weight          = None,
-        num_threads             = 1,
-        min_marker_size         = None,
-        watershed_connectivity  = 1,
-        watershed_compactness   = 1.,
-        halo_quantile           = 1.,
-        halo_spatial_tolerance  = None
-    ) -> np.ndarray:
-        """
-        Applies segmentation on `stacked_field` and returns an integer array of 
-        the same shape with each cell carrying the plate ID (i.e., segment
-        number). This function can be called multiple times from the same object
-        instance as it does not alter 
+            # making labels consistent and sequential
+            _unify_wraparound_labels(labels)
+            _make_labels_sequential(labels)
         
-        Warning
-        -------
-        There are several options that fundamentally alter the way this function 
-        works. The user is suggested to carefully read the documentation for all 
-        input parameters regardless of their apparent relevance to the specific 
-        task at hand.
-
-        Parameters
-        ----------
-        longitudinal_axis : int, optional
-            Which axis (0 or 1) represents the longitude for the mercator 
-            projection. By inputting a number, the operations are altered
-            knowing `stacked_field` is a mercator projection of a spherical
-            surface with `longitudinal_axis` representing the axis along which
-            the field wraps around the sphere (the other axis points toward the 
-            poles). 
-
-            In consequence, instead of a normal Euclidean distance transform, 
-            a spherical distance transform is used. Additionally, plate IDs will
-            we adjusted to ensure boundary conditions for a mercator projection 
-            (e.g., the plates that wrap around have the same ID).
-
-        interior_quantile : float, default=0.
-            The quantile that is sure to be a plate interior. Consequently, all
-            values less than the value that corresponds to this quantile will be
-            replaced with 0. It is suggested to leave this option at 0 (default).
-        
-        boundary_quantile : float, default=0.9
-            The quantile that represents values above which that are presumed to 
-
-        spatial_tolerance : float, optional
-            Whether to use a distance transform and consider regions with 
-            distances less than `spatial_tolerance` from the boundary (determined
-            by `boundary_quantile`) as a part of the boundary as well. This 
-            option is useful when segments (plates) have imperfect boundaries 
-            that require some spatial tolerance to close them.
-
-            If `longitudinal_axis` is provided, it is presumed that the field 
-            is a mercator projection and instead of a Euclidean distance 
-            transform, a spherical one will be applied. In that case, 
-            `spatial_tolerance` will be considered as the angle of tolerance 
-            on the great circle passing through a given pair of points in radians.
-
-        spatial_weight          = None,
-
-        num_threads : int, default=1
-            Number of threads to use to perform the spherical distance transform.
-        
-        min_marker_size : int, optional
-            If provided, watershed markers will be filtered such that markers 
-            with fewer cells/pixels than `min_marker_size` will be ignored. This
-            is useful when then input field is noisy or not coherent enough.
-        
-        watershed_connectivity  = 1,
-        watershed_compactness   = 1.,
-
-        halo_quantile : float, default=1.
-            If `halo_spatial_tolerance` is provided, `halo_quantile` represents 
-            the value above which every nearby cell (determined by 
-            `halo_spatial_tolerance`) will be elevated. This is to enhance 
-            watershed functionality and segment recognition.
-
-            This value should be set at a greater quantile that of 
-            `boundary_quantile`.
-        
-        halo_spatial_tolerance : float, optional
-            The spatial tolerance determined by a separate distance transform 
-            (Euclidean or spherical depending on `longitudinal_axis`).
-
-        """
-        # normalizing the stacked fields
-        self._normalize_stacked_field()
-        
-        
-        self.boundary_quantile_value, \
-            self.interior_quantile_value, \
-            self.halo_quantile_value = np.quantile(
-            self.stacked_field, 
-            [boundary_quantile, interior_quantile, halo_quantile]
+        # handling both spherical and planar cases
+        self.plate_IDs, self.ID_probs = random_walker(
+            data            = self.stacked_field_for_segmentation,
+            labels          = labels,
+            beta            = RW_beta,
+            solver_tol      = RW_solver_tolerance,
+            solver          = RW_solver,
+            is_spherical    = self.wraparound_azimuthally
         )
-
-        # operating on a separate copy
-        self.stacked_field_for_watershed = self.stacked_field.copy()
-
-        # forcing specific regions to be an interior, and thus, show up as a marker
-        # it is suggested not to be used!
-        if interior_quantile > 0.:
-            self.stacked_field_for_watershed[
-                self.stacked_field_for_watershed < self.interior_quantile_value
-            ] = 0.
-
-        self.markers = self.stacked_field_for_watershed < self.boundary_quantile_value
         
-        if longitudinal_axis is not None:
-            # field is spherical
-            if not ((longitudinal_axis == 0) or (longitudinal_axis == 1)):
-                raise ValueError("Longitudinal axis must be either 0 or 1.")
-            
-            if halo_spatial_tolerance is not None:
-                halo_region = sphfdtt(
-                    self.stacked_field_for_watershed > self.halo_quantile_value, 
-                    halo_spatial_tolerance,
-                    num_threads=num_threads
-                )
-                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
-                self.stacked_field_for_watershed[halo_region] *= \
-                    (1.-self.halo_quantile_value)
-                self.stacked_field_for_watershed[halo_region] += \
-                    self.halo_quantile_value
-
-            if spatial_tolerance is not None:
-                complement_markers = ~sphfdtt(
-                    self.stacked_field_for_watershed > self.boundary_quantile_value, 
-                    spatial_tolerance,
-                    num_threads=num_threads
-                )
-        else:
-            # field is Cartesian
-            if halo_spatial_tolerance is not None:
-                halo_region = ndimage.distance_transform_edt(
-                    self.stacked_field_for_watershed < self.halo_quantile_value
-                ) < halo_spatial_tolerance
-                #self.stacked_field_for_watershed[halo_region] = self.halo_quantile_value
-                self.stacked_field_for_watershed[halo_region] *= \
-                        (1.-self.halo_quantile_value)
-                self.stacked_field_for_watershed[halo_region] += \
-                    self.halo_quantile_value
-
-            if spatial_tolerance is not None:
-                complement_markers = ndimage.distance_transform_edt(
-                    self.stacked_field_for_watershed < self.boundary_quantile_value
-                ) > spatial_tolerance
+        if identify_nonconforming:
+            self.plate_IDs[(self.stacked_field > 0.5) | (self.ID_probs < 0.5)] = 0
         
-        if spatial_tolerance is not None:
-
-            # whether to also elevate the region near the boundary
-            # it is suggested not to be used! 
-            if spatial_weight is not None:
-                self.stacked_field_for_watershed += spatial_weight*(
-                        (~complement_markers).astype(self.stacked_field.dtype)
-                    )
-                self.stacked_field_for_watershed *= 1./(1. + spatial_weight)
-
-            temp_labels = ndimage.label(self.markers)[0]
-
-            # removing labels that have non-empty intersections
-            temp_unique_labels = np.unique(temp_labels[temp_labels != 0])
-
-            for label in temp_unique_labels:
-                if np.all(complement_markers[temp_labels == label] == False):
-                    # a new valid region is found which was overwhelmed by the
-                    # spatial tolerance
-                    complement_markers[temp_labels == label] = True
-            
-            del temp_labels, temp_unique_labels
-            self.markers = complement_markers
-
-        # filtering out micro markers
-        if min_marker_size is not None:
-            temp_labels = ndimage.label(self.markers)[0]
-
-            # removing labels that have non-empty intersections
-            temp_unique_labels = np.unique(temp_labels)
-
-            for label in temp_unique_labels:
-                if np.sum(temp_labels == label) < min_marker_size:
-                    self.markers[temp_labels == label] = False
-            
-            del temp_labels, temp_unique_labels
-        
-        # converting to an 8-bit integer (i.e., pixel-like) field
-        field_uint8 = (255.*self.stacked_field_for_watershed).astype(np.uint8)
-
-        if longitudinal_axis is not None:
-            # using tiling operation to ensure spherical boundary conditions
-            markers_ext = _tile_sph_surface(
-                field=self.markers, 
-                longitude_axis=longitudinal_axis
-            )
-
-            field_uint8_ext = _tile_sph_surface(
-                field=field_uint8, 
-                longitude_axis=longitudinal_axis
-            )
-
-            labels_ext = ndimage.label(markers_ext)[0]
-            plates_ext = watershed(
-                field_uint8_ext, 
-                labels_ext, 
-                connectivity=watershed_compactness, 
-                compactness=watershed_connectivity
-            )
-
-            ni, nj = self.stacked_field.shape
-            self.plate_IDs = plates_ext[ni:2*ni, nj:2*nj]
-
-            if longitudinal_axis == 0:
-                # fixing the polar condition
-                pole1_IDs = np.unique(self.plate_IDs[:, 0])
-                for ID in pole1_IDs:
-                    self.plate_IDs[self.plate_IDs == ID] = pole1_IDs.min()
-                pole2_IDs = np.unique(self.plate_IDs[:, -1])
-                for ID in pole2_IDs:
-                    self.plate_IDs[self.plate_IDs == ID] = pole2_IDs.min()
-
-                # fixing the wrapping boundaries
-                side1_IDs = self.plate_IDs[0, :]
-                side2_IDs = self.plate_IDs[-1, :]
-
-                for i in range(self.plate_IDs.shape[1]):
-                    if side1_IDs[i] != side2_IDs[i]:
-                        self.plate_IDs[self.plate_IDs == side2_IDs[i]] = side1_IDs[i]
-            else:
-                # fixing the polar condition
-                pole1_IDs = np.unique(self.plate_IDs[0, :])
-                for ID in pole1_IDs:
-                    self.plate_IDs[self.plate_IDs == ID] = pole1_IDs.min()
-                pole2_IDs = np.unique(self.plate_IDs[-1, :])
-                for ID in pole2_IDs:
-                    self.plate_IDs[self.plate_IDs == ID] = pole2_IDs.min()
-
-                # fixing the wrapping boundaries
-                side1_IDs = self.plate_IDs[:, 0]
-                side2_IDs = self.plate_IDs[:, -1]
-
-                for i in range(self.plate_IDs.shape[0]):
-                    if side1_IDs[i] != side2_IDs[i]:
-                        self.plate_IDs[self.plate_IDs == side2_IDs[i]] = side1_IDs[i]
-
-            # relabeling plate IDs 
-            raw_unified_IDs = np.unique(self.plate_IDs)
-            for i, ID in enumerate(raw_unified_IDs):
-                self.plate_IDs[self.plate_IDs == ID] = -i
-            self.plate_IDs *= -1
-        else:
-            # it is a Cartesian plane
-            labels = ndimage.label(self.markers)[0]
-            self.plate_IDs = watershed(
-                field_uint8, 
-                labels,
-                connectivity=watershed_compactness, 
-                compactness=watershed_connectivity
-            )
-            
-        return self.plate_IDs.copy()
+        if return_IDs:
+            return self.plate_IDs.copy()

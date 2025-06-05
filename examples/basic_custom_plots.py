@@ -1,7 +1,7 @@
 """
-@file basic.py
+@file basic_custom_plots.py
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief A template for basic usage of platerecipy.
+@brief A template for basic usage of platerecipy in customized plots.
 """
 
 # ~~~~~~~~~~~~~~ Reading and preparing an input dataset ~~~~~~~~~~~~~~~~~
@@ -50,6 +50,16 @@ m.find_plates(
     preserve_small_markers = True
 )
 
-# outputting as a ParaView readable .vtp file
-from platerecipy import io
-io.save_as_vtp(m, filename='basic.vtp')
+# to create custom plots
+import matplotlib.pyplot as plt
+
+# a given plate
+ID = 2
+
+fig, ax = plt.subplots()
+ax.set_title(
+    f"Plate with plate ID = {ID}\n" 
+    + f'mean value across the plate = {np.mean(input_field[m.plate_IDs == ID]):7.4f}'
+)
+ax.imshow(m.plate_IDs == ID)
+fig.savefig('basic_custom_plots.png', dpi=300)

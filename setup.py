@@ -13,10 +13,10 @@ platerecipy_clib_transform_module = Extension(
     extra_compile_args=extra_compile_args,
 )
 
-platerecipy_clib_utils_module = Extension(
-    'platerecipy_clib_utils',
+platerecipy_clib_segmentation_module = Extension(
+    'platerecipy_clib_segmentation',
     sources = [
-        'src/clib/utils.c'
+        'src/clib/segmentation.c'
     ],
     include_dirs = ['src/clib'],
     extra_compile_args=extra_compile_args,
@@ -24,9 +24,12 @@ platerecipy_clib_utils_module = Extension(
 
 setup(
     name = 'platerecipy',
-    version = '0.1.0',
+    version = '1.0.0',
     description = 'PLATE RECognition In PYthon',
-    long_description = '',
+    long_description = 
+        'platerecipy is a tool for detecting candidate plates on global geophysical ' 
+        'datasets. It analyzes the surface to identify diffuse and non-conforming regions, '
+        'as well as regions with low confidence in plate assignment.',
     long_description_content_type = 'text/markdown',
     url = 'https://github.com/pjavaheri/platerecipy',
     author = 'Pejvak Javaheri',
@@ -38,12 +41,12 @@ setup(
         'numpy', 
         'scipy',
         'matplotlib', 
-        'scikit-image',
-        'pyvista'
+        'pyvista',
+        'pandas'
     ],
     ext_modules = [
-        platerecipy_clib_transform_module, 
-        platerecipy_clib_utils_module
+        platerecipy_clib_transform_module,
+        platerecipy_clib_segmentation_module
     ],
     zip_safe = False
 )

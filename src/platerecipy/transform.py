@@ -3,9 +3,15 @@
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
 @brief Module for transformation functions.
 """
+
+import logging
+log = logging.getLogger(__name__)
+
 import os
 import ctypes
 import numpy as np
+
+from . import _INT, _FLOAT
 
 # importing shared libraries
 import sysconfig
@@ -70,11 +76,12 @@ def single_plate_interior_distance_transform(
         num_threads = os.cpu_count()
 
     # to interface with C
-    xs = xs.astype(np.float64)
-    ys = ys.astype(np.float64)
-    zs = zs.astype(np.float64)
+    xs = xs.astype(dtype=_FLOAT, order='C', copy=False)
+    ys = ys.astype(dtype=_FLOAT, order='C', copy=False)
+    zs = zs.astype(dtype=_FLOAT, order='C', copy=False)
+    plate_indicators = plate_indicators.astype(order='C', copy=False)
     
-    arr_out = -1. * np.ones(plate_indicators.shape, dtype=np.float64)
+    arr_out = -1. * np.ones(plate_indicators.shape, dtype=_FLOAT, order='C')
     arr_out[~plate_indicators] = -2.
 
     if num_threads > 1:
@@ -82,17 +89,17 @@ def single_plate_interior_distance_transform(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int64(arr_out.size),
+            ctypes.c_int32(arr_out.size),
             ctypes.c_double(R),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int64(num_threads)
+            ctypes.c_int32(num_threads)
         )
     else:
         platerecipy_clib_transform.single_plate_interior_distance_transform_64bit(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int64(arr_out.size),
+            ctypes.c_int32(arr_out.size),
             ctypes.c_double(R),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         )
@@ -101,12 +108,12 @@ def single_plate_interior_distance_transform(
 
 
 def full_plate_interior_distance_transform(
-    xs                  : np.ndarray,
-    ys                  : np.ndarray,
-    zs                  : np.ndarray,
-    plate_IDs           : np.ndarray,
-    R                   = None,
-    num_threads         = 1
+    xs          : np.ndarray,
+    ys          : np.ndarray,
+    zs          : np.ndarray,
+    plate_IDs   : np.ndarray,
+    R           = None,
+    num_threads = 1
 ) -> np.ndarray:
     """
     Performs a spherical (i.e., great-circle) distance transform on every patch
@@ -141,36 +148,37 @@ def full_plate_interior_distance_transform(
         np.ndarray
     """
     if R is None:
-        R = np.mean(np.sqrt(np.pow(xs**2 + ys**2 + zs**2, 0.5)))
+        R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))
 
     if num_threads == 'auto':
         num_threads = os.cpu_count()
 
     # to interface with C
-    xs = xs.astype(np.float64)
-    ys = ys.astype(np.float64)
-    zs = zs.astype(np.float64)
+    xs = xs.astype(dtype=_FLOAT, order='C', copy=False)
+    ys = ys.astype(dtype=_FLOAT, order='C', copy=False)
+    zs = zs.astype(dtype=_FLOAT, order='C', copy=False)
+    plate_IDs = plate_IDs.astype(dtype=_INT, order='C', copy=False)
 
-    arr_out = -1. * np.ones(plate_IDs.shape, dtype=np.float64)
+    arr_out = -1. * np.ones(plate_IDs.shape, dtype=_FLOAT, order='C')
 
     if num_threads > 1:
         platerecipy_clib_transform.full_plate_interior_distance_transform_64bit_threaded(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            plate_IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
-            ctypes.c_int64(arr_out.size),
+            plate_IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(arr_out.size),
             ctypes.c_double(R),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int64(num_threads)
+            ctypes.c_int32(num_threads)
         )
     else:
         platerecipy_clib_transform.full_plate_interior_distance_transform_64bit(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            plate_IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
-            ctypes.c_int64(arr_out.size),
+            plate_IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(arr_out.size),
             ctypes.c_double(R),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         )
@@ -179,12 +187,12 @@ def full_plate_interior_distance_transform(
 
 
 def fused_distance_threshold_transform(
-    xs                  : np.ndarray,
-    ys                  : np.ndarray,
-    zs                  : np.ndarray,
-    arr                 : np.ndarray,
-    threshold           : float,
-    R                   = None
+    xs          : np.ndarray,
+    ys          : np.ndarray,
+    zs          : np.ndarray,
+    arr         : np.ndarray,
+    threshold   : float,
+    R           = None
 ) -> np.ndarray:
     """
     Apply a fused distance threshold transform. The transformation preserves the 
@@ -219,22 +227,23 @@ def fused_distance_threshold_transform(
 
     """
     if R is None:
-        R = np.mean(np.sqrt(np.pow(xs**2 + ys**2 + zs**2, 0.5)))
+        R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))
 
     # to interface with C
-    xs = xs.astype(np.float64)
-    ys = ys.astype(np.float64)
-    zs = zs.astype(np.float64)
+    xs = xs.astype(dtype=_FLOAT, order='C', copy=False)
+    ys = ys.astype(dtype=_FLOAT, order='C', copy=False)
+    zs = zs.astype(dtype=_FLOAT, order='C', copy=False)
+    arr = arr.astype(dtype=bool, order='C', copy=False)
     
-    arr_out = np.zeros(arr.shape, dtype=bool)
+    arr_out = np.zeros(arr.shape, dtype=bool, order='C')
 
     platerecipy_clib_transform.fused_distance_threshold_transform_64bit(
         xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         arr.ctypes.data_as(ctypes.POINTER(ctypes.c_bool)),
-        ctypes.c_int64(arr.shape[0]),
-        ctypes.c_int64(arr.shape[1]),
+        ctypes.c_int32(arr.shape[0]),
+        ctypes.c_int32(arr.shape[1]),
         ctypes.c_double(R),
         ctypes.c_double(threshold),
         arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_bool))
@@ -244,13 +253,13 @@ def fused_distance_threshold_transform(
 
 
 def gridded_fused_distance_threshold_transform(
-    xs                  : np.ndarray,
-    ys                  : np.ndarray,
-    zs                  : np.ndarray,
-    arr                 : np.ndarray,
-    threshold           : float,
-    R                   = None,
-    num_threads         = 1
+    xs          : np.ndarray,
+    ys          : np.ndarray,
+    zs          : np.ndarray,
+    arr         : np.ndarray,
+    threshold   : float,
+    R           = None,
+    num_threads = 1
 ) -> np.ndarray:
     """
     Apply a fused distance threshold transform. The input 2D array `arr` should 
@@ -293,39 +302,43 @@ def gridded_fused_distance_threshold_transform(
 
     """
     if R is None:
-        R = np.mean(np.sqrt(np.pow(xs**2 + ys**2 + zs**2, 0.5)))
+        log.debug("No radius provided. Estimating it from the node coordinates.")
+        R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))
 
     if num_threads == 'auto':
         num_threads = os.cpu_count()
 
     # to interface with C
-    xs = xs.astype(np.float64)
-    ys = ys.astype(np.float64)
-    zs = zs.astype(np.float64)
+    xs = xs.astype(dtype=_FLOAT, order='C', copy=False)
+    ys = ys.astype(dtype=_FLOAT, order='C', copy=False)
+    zs = zs.astype(dtype=_FLOAT, order='C', copy=False)
+    arr = arr.astype(dtype=bool, order='C', copy=False)
     
-    arr_out = np.zeros(arr.shape, dtype=bool)
+    arr_out = np.zeros(arr.shape, dtype=bool, order='C')
 
     if num_threads > 1:
+        log.debug("Calling gridded_fused_distance_threshold_transform_64bit_threaded from C on %d threads", num_threads)
         platerecipy_clib_transform.gridded_fused_distance_threshold_transform_64bit_threaded(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             arr.ctypes.data_as(ctypes.POINTER(ctypes.c_bool)),
-            ctypes.c_int64(arr.shape[0]),
-            ctypes.c_int64(arr.shape[1]),
+            ctypes.c_int32(arr.shape[0]),
+            ctypes.c_int32(arr.shape[1]),
             ctypes.c_double(R),
             ctypes.c_double(threshold),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_bool)),
-            ctypes.c_int64(num_threads),
+            ctypes.c_int32(num_threads),
         )
     else:
+        log.debug("Calling gridded_fused_distance_threshold_transform_64bit from C")
         platerecipy_clib_transform.gridded_fused_distance_threshold_transform_64bit(
             xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             arr.ctypes.data_as(ctypes.POINTER(ctypes.c_bool)),
-            ctypes.c_int64(arr.shape[0]),
-            ctypes.c_int64(arr.shape[1]),
+            ctypes.c_int32(arr.shape[0]),
+            ctypes.c_int32(arr.shape[1]),
             ctypes.c_double(R),
             ctypes.c_double(threshold),
             arr_out.ctypes.data_as(ctypes.POINTER(ctypes.c_bool))

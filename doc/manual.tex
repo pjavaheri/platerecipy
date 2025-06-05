@@ -4,9 +4,14 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amsfonts}
+\usepackage{longtable}
 \usepackage{amssymb}
 \usepackage{listings}
 \usepackage[colorlinks=true, citecolor=red]{hyperref}
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+\usetikzlibrary{decorations.pathmorphing}
+\usepackage{ifthen}
 
 % ~~~ references ~~~
 \usepackage[
@@ -58,10 +63,11 @@
 \vspace{8cm}
 }
 
-\date{\small Version 0.1.0, documentation updated on \today}
+\date{\small Version 1.0.0, documentation updated on \today}
 
 \makeindex
 \begin{document}
+
 \maketitle
 
 \newpage
@@ -69,9 +75,16 @@
 
 \newpage
 \section{Introduction}
-intro \parencite{grady2006} \textcite{grady2006} \autocite{grady2006}
+PLATE RECognition In PYthon (\texttt{platerecipy}) is a package tailored for 
+plate identification on 3D spherical surface of mantle convection models and 
+geodetic datasets\footnote{Though most \texttt{platerecipy} modules support a 
+2D input, additional work remains for a full integration of such functionalities.}. 
+At its core, \texttt{platerecipy}
+uses Random Walker (RW) algorithm developed by \textcite{grady2006} but modified 
+for a spherical surface. \textbf{The probability array obtained from RW is the 
+main feature of this package that enables further quantitative analysis of the 
+identified plates.}
 
-\newpage
 \section{Dependencies}
 Currently, \hl{Linux is the only supported platform}. Since MacOS is Unix-based, 
 \texttt{platerecipy} is expected to be installed and used without a problem.
@@ -88,14 +101,10 @@ includes the necessary dependencies:
     \item \texttt{scipy} \parencite{scipy}: for specific scientific utilities
     \item \texttt{matplotlib} \parencite{matplotlib}: for basic plots
     \item \texttt{pyvista} \parencite{pyvista}: for \texttt{vtk} output and 3D visualization
-    \item \texttt{scikit-image} \parencite{scikit-image}: for a Random Walker implementation
+    \item \texttt{pandas} \parencite{pandas}: for additional io operations
 \end{itemize}
-In future releases, the Random Walker from \texttt{scikit-image} will
-be replaced by a \texttt{C} implementation tailored for problems that 
-\texttt{platerecipy} is designed for. Until then, the \texttt{scikit-image}
-remains as a dependency.
 
-\newpage
+
 \section{Installation}
 Until the packages is released on PyPI, \texttt{platerecipy} can be installed using 
 \texttt{pip} on the shell as follows:
@@ -107,8 +116,23 @@ where \texttt{platerecipy-?.?.?.tar.gz} is the installation tar file for the des
 version. Note that all \hl{installation tar files can be found in \texttt{dist} 
 subdirectory.}
 
-\newpage
 \section{Basic interface}
+For most purposes, only the following modules are of interest:
+\begin{itemize}
+	\item \texttt{grid}: providing class and function definitions to interpolate and construct a grid,
+	\item \texttt{model}: providing class and function definitions to defined a plate model and identify candidate plates, andthese
+	\item \texttt{io}: providing helper functions for outputting in various formats.
+\end{itemize}
+Accessing these modules are done simply using \texttt{import}:
+\begin{lstlisting}[language=Python]
+from platerecipy.grid import SphericalGrid
+
+from platerecipy.model import PlateModel
+
+from platerecipy.io import save_as_mat, save_as_vtp, save_as_csv
+\end{lstlisting}
+(though discouraged, one can import all the content by \texttt{*} wildcard).
+
 \texttt{platerecipy} is developed under the notion that it must accommodate users 
 with different dataset formats and from different grid structures (e.g., spherical, 
 YinYang, icosahedral, etc.). Accordingly, as much as possible, the interface
@@ -138,7 +162,7 @@ The \texttt{SphericalGrid} object is itself a derived type of a generic class
 \texttt{Grid}, but it informs the code whether additional considerations (e.g., 
 applying the wraparound boundary condition or spherical distances) are required.
 Then, our \texttt{SphericalGrid} object is to be used to interpolate \texttt{input\_field}
-to the input points to a spherical grid. \hl{The segmentation is performed on the linearly-interpolated uniform spherical grid.} The interpolation process is 
+to the input points to a spherical grid. \hl{Segmentation is performed on the linearly-interpolated uniform spherical grid.} Interpolation process is 
 performed using the method \texttt{interpolate\_field}:
 \begin{lstlisting}[language=Python]
 # interpolating an input field
@@ -191,11 +215,21 @@ and also it save them in the model object as \texttt{m.plate\_IDs} (containing s
 and \texttt{m.ID\_probs} (containing the associated probabilities).
 
 \newpage
-\section{Detailed API documentation}
-Though this guide is maintained such that with every modification the corresponding 
-section is updated, in case of any discrepancies, function docstrings are to be 
-considered the main source providing updated description. In order to access 
-docstrings, one can easily invoke \texttt{help()} command or use \texttt{?} on
+\section{Examples}
+In this section, a number of examples are provided to demonstrate various features 
+of \texttt{platerecipy}.
+
+\subsection{\texttt{examples/basic.py}: A template from input to \texttt{.vtp} output}
+\lstinputlisting[language=Python]{../examples/basic.py}
+
+\newpage
+\subsection{\texttt{examples/basic\_custom\_plot.py}: A template from input to custom plots}
+\lstinputlisting[language=Python]{../examples/basic_custom_plots.py}
+
+\newpage
+\section{Additional details}
+Function docstrings are to be considered the main source providing updated description. 
+In order to access docstrings, one can easily invoke \texttt{help()} command or use \texttt{?} on
 \texttt{jupyter} notebook.
 
 
@@ -207,102 +241,169 @@ The source code is effectively divided to two portions:
     \texttt{C} for better performance.
 \end{itemize}
 
-\subsection{\texttt{grid} module}
-The \texttt{grid} module contains the necessary class and function definitions 
-for grid structure. It contains the generic \texttt{Grid} class inherited by 
-\texttt{SphericalGrid} class which has the additional attributes relevant for 
-a spherical surface. As a general rule, \hl{$\theta$ and $\phi$ correspond to polar 
-(colatitude) and azimuthal (longitude) directions.}
+\subsection{\texttt{segmentation} module}
+In \texttt{platerecipy}, Random Walker (RW) segmentation algorithm \parencite{grady2006}
+is implemented primarily for the surface of a sphere (i.e., 3D spherical shell), 
+though it is capable of performing segmentation on a flat 2D plane, as well.
+In short, linear system construction (i.e., vertex/edge associations, label ordering, etc.)
+is performed using the functions implemented in \texttt{C} (i.e., \texttt{segmentation.h}),
+while the numerical solution and the interface is done through the \texttt{Python}
+side (i.e., \texttt{segmentation.py}) using \texttt{NumPy} \parencite{numpy} and \texttt{SciPy}
+\parencite{scipy} routines.
 
+The user interface is implemented by the function:
 \begin{lstlisting}[language=Python]
-class SphericalGrid(Grid):
-    """
-    Uniform spherical grid.
-    """
-
-    def __init__(
-        self,
-        original_xs  : np.ndarray,
-        original_ys  : np.ndarray,
-        original_zs  : np.ndarray,
-        theta_res    = None,
-        phi_res      = None,    
-    )
-        """
-        Constructs a uniform spherical grid structure. 
-        
-        If `theta_res` and `phi_res` are provided, the resolution will be 
-        determined by those values. Alternatively, the resolution close enough 
-        to what provided by the Cartesian arguments.
-
-        Warning
-        -------
-        The Cartesian arguments will be the basis upon which the class method
-        `interpolate_field()` operates. In consistent values will impact the 
-        interpolation process.
-
-        Parameters
-        ----------
-        original_xs : np.ndarray,
-            array of original input Cartesian x coordinates.
-
-        original_ys : np.ndarray,
-            array of original input Cartesian y coordinates.
-
-        original_zs : np.ndarray,
-            array of original input Cartesian z coordinates.
-        
-        theta_res : int, optional
-            polar (colatitude) resolution. 
-
-        phi_res : int, optional
-            azimuthal (longitude) resolution.
-        """
-
-    def interpolate_field(
-        self,
-        field       : np.ndarray,
-        take_log    = False
-    ) -> np.ndarray:
-        """
-        Interpolates the input field linearly for convex hull interior points and
-        closest points to the exterior.
-
-        Parameters
-        ----------
-        field : np.ndarray,
-            array corresponding to the original Cartesian coordinate inputs.
-        
-        take_log : bool, False
-            whether to perform the interpolation on the log space (suitable for
-            fields that vary by orders of magnitude), default = False.
-        
-        Returns
-        -------
-        np.ndarray
-        """
+def random_walker(
+    data                            : np.ndarray, 
+    labels                          : np.ndarray,
+    beta                            = 100.,
+    is_spherical                    = False, 
+    max_beta_reduction_attempts     = 3,
+    beta_reduction_fraction         = 0.9,
+    beta_reduction_residual_tol     = 1e-3
+)
 \end{lstlisting}
+and returns the plate IDs and the ID probabilities as a tuple \texttt{(IDs, probs)}.
+Yet, function \texttt{random\_walker} is effectively a wrapper that prepares the input
+to and output from functions \texttt{get\_AB} and \texttt{solve\_AX\_B}. The \texttt{data}
+array is the input field/image and is assumed to be floating point. The \texttt{labels} 
+must be of the same shape as \texttt{data} but an integer field with the unmarked 
+regions labeled with zeros and each marked patch with a distinct but sequential 
+positive integer label. Since overly large values for $\beta$ destabilize the linear 
+system, \texttt{random\_walker} has a built-in mechanism that gradually reduces input \texttt{beta}
+by a factor of \texttt{beta\_reduction\_fraction}, \texttt{max\_beta\_reduction\_attempts}
+many times until the $L_2$ norm of the residual of the solution to the numerical 
+system is driven down below \texttt{beta\_reduction\_residual\_tol}.
 
-\subsection{\texttt{model} module}
+Function \texttt{get\_AB} constructs the linear system and returns:
+\begin{itemize}
+    \item \texttt{A}: the sparse $L_{\mathrm{unmarked}}$ matrix,
+    \item \texttt{RHS}: the full right-hand-side matrix $-B^T \left [m^{(1)} m^{(2)} \cdots m^{(N)} \right ]$, and
+    \item \texttt{org2org}: the vector that maps the ordered node indices to the original indexing 
+    where \texttt{ord2org[i\_ord] == i\_org}.
+\end{itemize}
+whose values are subsequently passed onto \texttt{solve\_AX\_B} which accepts:
+\begin{itemize}
+    \item \texttt{A}: the left-hand-side matrix,
+    \item \texttt{B}: the right-hand-side matrix (essentially, \texttt{RHS} from \texttt{get\_AB} and not to be confused with $B$ in \cite{grady2006}) and must at least have two columns (otherwise its a trivial or an untenable solution), 
+    \item (optional) \texttt{solver}: by default set to LU decomposition (\texttt{'LU'}) but other options (e.g., \texttt{'direct', 'CG', 'FA'}) are available, and
+    \item (optional) \texttt{safe\_mode}: by default set to \texttt{True} which solves for all the probabilities (as opposed to solving for $N-1$ probabilities and assuming $p_N = 1 - \sum^{N-1} p_i$).
+\end{itemize}
+Finally, the solution to the linear system (which is ordered) is converted back to 
+the original indexing using \texttt{ord2org}.
 
-\subsection{\texttt{io} module}
+\subsubsection{RW on a 2D plane}
+This mode is enabled by passing \texttt{is\_spherical=False} and suggests that 
+the input grid is a uniform rectilinear grid (effectively an image; see Figure \ref{fig:2d-grid}). 
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}[scale=0.8]
+        
+    \foreach \x in {0,...,12} {
+        \foreach \y in {0,...,6} {
 
-\subsection{\texttt{transform} module}
+            \ifthenelse{\y > 5}{
+                \fill (\x, \y) circle (4pt) node[above]{\x};
+            }{
+                \fill (\x, \y) circle (4pt);
+            }
+            \pgfmathtruncatemacro\result{6-\y}
+            \ifthenelse{\x < 1}{
+                \fill (\x, \y) circle (4pt) node[left]{\result};
+            }{
+                \fill (\x, \y) circle (4pt);
+            }
+            
+        }
+    }
+    \draw[thick] (0,0) grid[step=1] (12,6); 
+    \node at (6, 7) {$j$};
+    \node at (-1, 3) {$i$};
+    \end{tikzpicture}
+    \caption{A sample 2D grid showing vertices and edges.}
+    \label{fig:2d-grid}
+\end{figure}
+
+\subsubsection{RW on a sphere}
+This mode is enabled by passing \texttt{is\_spherical=True} and suggests that 
+the input grid is a uniform spherical grid with wraparound boundary conditions.
+Since it is assumed that the \texttt{data} is an array containing the mercator 
+projection of a sphere, to be consistent with the rest of the package, it is also 
+assumed here that:
+\begin{itemize}
+    \item \texttt{data[:, 0] == data[:, -1]} to satisfy wraparound boundary conditions (and similarly \texttt{labels} and the downstream output),
+    \item \texttt{data[0, :]} are all the same and correspond to the north pole at $\theta = 0$, and
+    \item \texttt{data[-1, :]} are all the same and correspond to the south pole at $\theta = \pi$.
+\end{itemize}
+Accordingly, at the entry point in \texttt{random\_walker}, both \texttt{data} and 
+\texttt{labels} are trimmed off of their redundant last columns, and all the 
+helper \texttt{C} functions in \texttt{segmentation.h} that end with \texttt{\_sph}
+assume the input arrays do not have the redundant column. This is critical as 
+the arrays are passed by providing the pointer to the first index and the number of 
+columns plays a fundamental role in the functions' ability to access, map, and order 
+the indices. Furthermore, the last node on the first row and 
+the first node on the last row of the trimmed array are considered as the north 
+and south poles, respectively (see Figure \ref{fig:sph-grid}).
+
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}[scale=0.8]
+
+    \draw[color=gray] (0,0) grid[step=1] (12,6);
+    \draw[color=black] (0,1) grid[step=1] (11,5);
+
+    \foreach \r in {1,...,5} {
+        \draw[thick, color=red] (0, \r) to (0.25, \r-0.25);  %[bend right=2000]
+        \draw[thick, color=red, dashed] (0.25, \r-0.25) to (11.25 + 0.25, \r-0.25);
+        \draw[thick, color=red] (11, \r) to (11.25 + 0.25, \r-0.25);
+    }
+        
+    \foreach \x in {0,...,12} {
+        \foreach \y in {0,...,6} {
+
+            \ifthenelse{\y > 5}{
+                \fill (\x, \y) circle (4pt) node[above]{\x};
+            }{
+                \fill (\x, \y) circle (4pt);
+            }
+            \pgfmathtruncatemacro\result{6-\y}
+            \ifthenelse{\x < 1}{
+                \fill (\x, \y) circle (4pt) node[left]{\result};
+            }{
+                \fill (\x, \y) circle (4pt);
+            }
+            
+        }
+    }
+    
+    \foreach \x in {0,...,10} {
+        \fill[lightgray] (\x, 6) circle (4pt);
+    }
+    \foreach \y in {0,...,6} {
+        \fill[lightgray] (12, \y) circle (4pt);
+    }
+    \foreach \x in {1,...,11} {
+        \fill[lightgray] (\x, 0) circle (4pt);
+    }
+
+    \foreach \x in {0,...,11} {
+        \draw[blue] (11, 6) -- (\x, 5);
+        \draw[blue] (0, 0) -- (\x, 1);
+    }
+
+     
+    \node at (6, 7) {$j$};
+    \node at (-1, 3) {$i$};
+    \end{tikzpicture}
+    \caption{A sample spherical grid showing vertices and edges.}
+    \label{fig:sph-grid}
+\end{figure}
 
 
-\newpage
-\section{Examples}
-
-\lstinputlisting[language=Python]{../examples/basic.py}
 
 
 \newpage
 \addcontentsline{toc}{section}{References}
 \printbibliography
-
-
-\newpage
-\appendix
-\section{About the backend}
 
 \end{document}
