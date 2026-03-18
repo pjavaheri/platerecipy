@@ -272,7 +272,7 @@ class PartialSphericalGrid(Grid):
         self,
         field           : np.ndarray,
         take_log        = False,
-        method          = "tangent-plane", #"lat-lon" or "tangent-plane",
+        method          = "lat-lon", #"lat-lon" or "tangent-plane",
         **method_kwargs
     ) -> np.ndarray:
         """
