@@ -264,4 +264,96 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
     int32_t     num_threads
 );
 
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//     pgridded_fused_distance_threshold_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the fused distance 
+ * transform is applied on a 2D gridded array of booleans. In all, the original 
+ * array `arr` must be different from the output `arr_out`. In all these functions,
+ * all arrays are presumed to be gridded as a uniform spherical grid and have 
+ * identical shapes. Note that in the following functions, the grid does not 
+ * fully cover the sphere.
+ */
+
+
+/**
+ * Performs a distance transform and applies a threshold transform such that 
+ * the resulting array contains `true` for all points withing the distance 
+ * of `threshold` measured from the great-circle distances on the sphere.
+ * 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param arr initial 2D gridded boolean array
+ * @param i_max length of the array along the first dimension
+ * @param j_max length of the array along the second dimension
+ * @param R the radius of the sphere
+ * @param theta_min lower theta range
+ * @param theta_max upper theta range
+ * @param phi_min lower theta range
+ * @param phi_max upper theta range
+ * @param threshold distance threshold in radians
+ * @param arr_out for the output transformed boolean array
+ * 
+ * @returns 0 if no error
+ */
+int pgridded_fused_distance_threshold_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int32_t     i_max,
+    int32_t     j_max,
+    double      R,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      threshold,
+    bool *      arr_out
+);
+
+/**
+ * Performs a distance transform and applies a threshold transform such that 
+ * the resulting array contains `true` for all points withing the distance 
+ * of `threshold` measured from the great-circle distances on the sphere.
+ * This is the threaded version of `pgridded_fused_distance_threshold_transform_64bit`.
+ * 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates 
+ * @param arr initial 2D gridded boolean array
+ * @param i_max length of the array along the first dimension
+ * @param j_max length of the array along the second dimension
+ * @param R the radius of the sphere
+ * @param theta_min lower theta range
+ * @param theta_max upper theta range
+ * @param phi_min lower theta range
+ * @param phi_max upper theta range
+ * @param threshold distance threshold in radians
+ * @param arr_out for the output transformed boolean array
+ * @param num_threads number of threads
+ * 
+ * @returns 0 if no error
+ */
+int pgridded_fused_distance_threshold_transform_64bit_threaded(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int32_t     i_max,
+    int32_t     j_max,
+    double      R,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      threshold,
+    bool *      arr_out,
+    int32_t     num_threads
+);
+
 #endif

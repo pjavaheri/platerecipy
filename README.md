@@ -14,20 +14,19 @@ stage is not supported. That is why, currently, Linux is the only supported plat
 
 ## Installation
 
-Until the packages is released on PyPI, `platerecipy` can be installed using 
+Releases are made available on PyPI so that `platerecipy` can be installed using 
 `pip` on the shell as follows:
 ```bash
-user@shell:~$ python -m pip install dist/platerecipy-?.?.?.tar.gz
+python -m pip install platerecipy
 ```
-where `platerecipy-?.?.?.tar.gz` is the installation tar file for the desired 
-version. Note that all installation tar files can be found in `dist` 
-subdirectory.
 
 ## User guide
 
-The user manual can be found under `doc` as a LaTeX source file. It 
-includes general information about the package, function/class documentations, 
-as well as a number of examples to be used as recipes!
+`platerecipy`'s documentation is moved to [platerecipy.readthedocs.com](platerecipy.readthedocs.com)!
+
+For a detailed explanation and illustration of `platerecipy`'s core functionalities,
+please refer to:
+> Javaheri, P., & Lowman, J. P. (2026). A random walker algorithm for plate boundary detection in spherical mantle convection models and global geophysical data sets: Application to Euler vector determination. _Journal of Geophysical Research: Solid Earth_, 131, e2025JB032259. https://doi.org/10.1029/2025JB032259
 
 As a demonstration, assuming a given `input_xs`, `input_ys`, `input_zs`, and  
 `input_field` (all `numpy` arrays), using `platerecipy` is as simple as follows:

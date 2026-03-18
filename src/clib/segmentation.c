@@ -147,6 +147,70 @@ int get_Laplacian_from_edges(
 }
 
 
+int get_Laplacian_from_edges_psph(
+    double *    image,
+    int32_t *   edges,
+    int32_t     n_i,
+    int32_t     n_j,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      beta,
+    int32_t *   rows,
+    int32_t *   columns,
+    double *    values
+) {
+    // num_edges must be equal to (n_i-1)*n_j + n_i*(n_j-1)
+    // image is a flattened 2D array with shape [n_i, n_j]
+    // edges is a flattened 2D array with shape [num_edges, 2]
+    // rows, columns, and array should be num_edges*2 long 
+    int num_edges = (n_i-1)*n_j + n_i*(n_j-1);
+    const int edges_size = 2 * num_edges;
+
+    const double d_theta    = (theta_max - theta_min) / ((double) (n_i - 1));
+    const double d_phi      = (phi_max - phi_min) / ((double) n_j);
+    
+    for (int l = 0; l < edges_size-1; l = l + 2){
+        const int32_t vertex1 = edges[l];
+        const int32_t vertex2 = edges[l+1];
+        const double contrast = image[vertex1] - image[vertex2];
+
+        const int i1 = vertex1/n_j;
+        const int j1 = vertex1%n_j;
+        const int i2 = vertex2/n_j;
+        const int j2 = vertex2%n_j;
+
+        double metric_correction = 1.;
+        if (i1 == i2) {
+            // same latitude and not a polar point
+            const double theta = theta_min + ((double) i1) * d_theta;
+            const double distance =  sin(theta)*d_phi;
+            metric_correction = 1./distance;
+        } else if (j1 == j2) {
+            // same longitude
+            const double distance = d_theta;
+            metric_correction = 1./distance;
+        }
+        if (((isinf(metric_correction)) || (isnan(metric_correction))) 
+            || (metric_correction > BIG)) {
+            metric_correction = BIG;
+        }
+
+        const double value = -exp(-beta*contrast*contrast)*metric_correction;
+
+        rows[l]         = vertex1;
+        rows[l+1]       = vertex2;
+        columns[l]      = vertex2;
+        columns[l+1]    = vertex1;
+        values[l]       = value;
+        values[l+1]     = value;
+    }
+    
+
+    return 0;
+}
+
 
 int get_Laplacian_from_edges_sph(
     double *    image,
@@ -385,6 +449,57 @@ int get_ordered_Laplacian_vectors(
 
     return 0;
 }
+
+
+int get_ordered_Laplacian_vectors_psph(
+    double *    data,
+    int32_t *   labels,
+    int32_t     n_i,
+    int32_t     n_j,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      beta,
+    int32_t *   rows_ord,
+    int32_t *   columns_ord,
+    double *    values,
+    int32_t *   ord2org
+) {
+    // total size of the problem
+    const int N = n_i * n_j;
+
+    // number of connecting edges
+    int num_edges = (n_i - 1)*n_j + n_i*(n_j - 1);
+    
+    // the vector of edges containing pairs of [from, to]
+    int32_t * edges   = (int32_t *) malloc((2*num_edges) * sizeof(int32_t));
+
+    // vectors to contain non-diagonal Laplacian entries
+    int32_t * rows    = (int32_t *) malloc((2*num_edges) * sizeof(int32_t));
+    int32_t * columns = (int32_t *) malloc((2*num_edges) * sizeof(int32_t));
+    
+    // reference bookkeeping vectors to go back and forth between original 
+    // (row-major) and ordered (labeled followed by unlabeled).
+    int32_t * org2ord = malloc(N * sizeof(int32_t));
+    
+    populate_edges(edges, n_i, n_j);
+    get_Laplacian_from_edges_psph(
+        data, edges, n_i, n_j, 
+        theta_min, theta_max, phi_min, phi_max, 
+        beta, rows, columns, values
+    );
+    free(edges);
+    get_original_to_ordered_mapping(labels, n_i, n_j, org2ord, ord2org);
+    order_Laplacian(org2ord, rows, columns, n_i, n_j, rows_ord, columns_ord); 
+    free(org2ord);
+    free(rows);
+    free(columns);
+
+    return 0;
+}
+
+
 
 int get_ordered_Laplacian_vectors_sph(
     double *    data,

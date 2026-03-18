@@ -118,6 +118,46 @@ int get_Laplacian_from_edges(
 /**
  * Populates vectors `rows`, `column`, and `values` (to later use it to define 
  * the sparse Laplacian matrix), with values obtained from a Gaussian dependence 
+ * on a slice of a uniform spherical grid with an additional multiplicative 
+ * metric correction factor to make up for the polar distortion. The metric 
+ * correction is capped at constant `BIG`.
+ * 
+ * @param image a 2D array of input image
+ * @param edges array of edges
+ * @param n_i number of grid points along the polar direction
+ * @param n_j number of grid points along the azimuthal direction
+ * @param theta_min lower range of theta
+ * @param theta_max upper range of theta
+ * @param phi_min lower range of phi
+ * @param phi_max upper range of phi
+ * @param beta Gaussian scaling factor
+ * @param rows vector indicating the row
+ * @param columns vector indicating the column
+ * @param values vector carrying the corresponding value
+ * 
+ * @warning `rows`, `column`, and `values` must be allocated array of size: 
+ *           2*( (n_i-1)*n_j + n_i*(n_j-1) ) 
+ * @warning arrays `rows`, `columns`, and `values` will be updated.
+ */
+int get_Laplacian_from_edges_psph(
+    double *    image,
+    int32_t *   edges,
+    int32_t     n_i,
+    int32_t     n_j,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      beta,
+    int32_t *   rows,
+    int32_t *   columns,
+    double *    values
+);
+
+
+/**
+ * Populates vectors `rows`, `column`, and `values` (to later use it to define 
+ * the sparse Laplacian matrix), with values obtained from a Gaussian dependence 
  * on a uniform spherical grid with an additional multiplicative metric correction
  * factor to make up for the polar distortion. The metric correction is capped 
  * at constant `BIG`.
@@ -281,6 +321,48 @@ int get_ordered_Laplacian_vectors(
     int32_t *   labels,
     int32_t     n_i,
     int32_t     n_j,
+    double      beta,
+    int32_t *   rows_ord,
+    int32_t *   columns_ord,
+    double *    values,
+    int32_t *   ord2org
+);
+
+
+/**
+ * Populates `rows_ord`, `column_ord`, and `values` to be used as vectors to
+ * construct a sparse matrix, with ordered indices.
+ * 
+ * @warning This function provides an adequate initialization and wrapping of 
+ * functions: 
+ * `populate_edges()`,
+ * `get_Laplacian_from_edges_psph()`,
+ * `get_original_to_ordered_mapping()`, and
+ * `order_Laplacian()`.
+ * 
+ * @param data a 2D array of input image
+ * @param labels the 2D array of markers
+ * @param n_i number of grid points along the polar direction
+ * @param n_j number of grid points along the azimuthal direction
+ * @param theta_min lower range of theta
+ * @param theta_max upper range of theta
+ * @param phi_min lower range of phi
+ * @param phi_max upper range of phi
+ * @param beta Gaussian scaling factor
+ * @param rows_ord ordered vector indicating the row
+ * @param columns_ord ordered vector indicating the column
+ * @param values vector carrying the corresponding value
+ * @param ord2org vector mapping original ordering to sorted ordering
+ */
+int get_ordered_Laplacian_vectors_psph(
+    double *    data,
+    int32_t *   labels,
+    int32_t     n_i,
+    int32_t     n_j,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
     double      beta,
     int32_t *   rows_ord,
     int32_t *   columns_ord,

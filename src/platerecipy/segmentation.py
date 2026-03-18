@@ -1,7 +1,7 @@
 """
-@file transform.py
+@file segmentation.py
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for transformation functions.
+@brief Module for segmentation functions.
 """
 
 import logging
@@ -12,6 +12,7 @@ import numpy as np
 import scipy as sp
 
 from . import _INT, _FLOAT
+from .grid import Grid, PartialSphericalGrid, SphericalGrid
 
 # importing shared libraries
 import os
@@ -58,12 +59,12 @@ def _labels_are_wraparound(labels: np.ndarray) -> bool:
 
 
 def get_AB(
-    data            : np.ndarray,
-    labels          : np.ndarray,
-    beta            : float,
-    num_labelled    : int,
-    largest_label   : int,
-    is_spherical    = False
+    data             : np.ndarray,
+    labels           : np.ndarray,
+    beta             : float,
+    num_labelled     : int,
+    largest_label    : int,
+    grid             = None
 ) -> tuple:
     """
     Constructs the RW linear system by generating the right-hand-side, `'A'`, and
@@ -86,12 +87,8 @@ def get_AB(
     largest_label : int,
         The largest label (i.e., the number of segments).
 
-    is_spherical : bool, default=False,
-        Whether to interpret the input 2D field as a Mercator projection of the 
-        surface of a 3D sphere (i.e., uniform spherical grid) or as a flat 2D 
-        surface (i.e., uniform rectilinear grid). If enabled, the wraparound 
-        connections are considered when constructing the RW linear system, as 
-        well as a metric correction on the connection weights.
+    grid : Grid, optional
+        An instance of the grid object to perform segmentation on.
     
     Returns
     -------
@@ -100,7 +97,7 @@ def get_AB(
 
     Warning
     -------
-    If `is_spherical == True`, it is assumed that the first axis 
+    If `grid_type == sph`, it is assumed that the first axis 
     (i.e., `axis==0`; the rows) of `data` (and similarly for `label`) correspond 
     to the theta (polar) direction, and the second axis (i.e., `axis==1`; the columns)
     correspond to the azimuthal direction. The last column is simply the same as 
@@ -116,7 +113,7 @@ def get_AB(
     # getting image shape
     n_i, n_j = data.shape
     
-    if is_spherical:
+    if isinstance(grid, SphericalGrid):
         # total size of the problem
         N = (n_i-2) * n_j + 2
         num_edges = (2*n_i - 3)*n_j
@@ -160,7 +157,59 @@ def get_AB(
             ctypes.c_int32(largest_label),
             M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         )
-    else:
+
+    elif isinstance(grid, PartialSphericalGrid):
+        # total size of the problem
+        N = n_i * n_j
+        num_edges = (n_i - 1)*n_j + n_i*(n_j - 1)
+
+        # vectors to contain non-diagonal Laplacian entries
+        rows    = np.zeros(num_edges*2, dtype=_INT,   order='C')
+        columns = np.zeros(num_edges*2, dtype=_INT,   order='C')
+        values  = np.zeros(num_edges*2, dtype=_FLOAT, order='C')
+
+        # reference bookkeeping vectors to go back and forth between original 
+        # (row-major) and ordered (labeled followed by unlabeled).
+        ord2org = np.zeros(N, dtype=_INT, order='C')
+
+        log.debug("Calling get_ordered_Laplacian_vectors_psph form C")
+        platerecipy_clib_segmentation.get_ordered_Laplacian_vectors_psph(
+            data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(n_i),
+            ctypes.c_int32(n_j),
+            ctypes.c_double(grid.theta_range[0]),
+            ctypes.c_double(grid.theta_range[1]),
+            ctypes.c_double(grid.phi_range[0]),
+            ctypes.c_double(grid.phi_range[1]),
+            ctypes.c_double(beta),
+            #ctypes.c_double(max_beta_spatial_correction),
+            rows.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            columns.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        )
+
+        L_ord = sp.sparse.csr_matrix((values, (rows, columns)), shape=(N, N), dtype=_FLOAT)
+        L_ord.setdiag(-np.ravel(L_ord.sum(axis=0)))
+        
+        L_U = L_ord[num_labelled:, num_labelled:]
+        B_T = L_ord[num_labelled:, :num_labelled]
+
+        
+        M = np.zeros((num_labelled, largest_label), dtype=_FLOAT, order='C')
+        log.debug("Calling get_ordered_boundary_matrix form C")
+        platerecipy_clib_segmentation.get_ordered_boundary_matrix(
+            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(n_i),
+            ctypes.c_int32(n_j),
+            ctypes.c_int32(num_labelled),
+            ctypes.c_int32(largest_label),
+            M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        )
+
+    elif isinstance(grid, Grid) or (grid is None):
         # total size of the problem
         N = n_i * n_j
         num_edges = (n_i - 1)*n_j + n_i*(n_j - 1)
@@ -206,6 +255,8 @@ def get_AB(
             ctypes.c_int32(largest_label),
             M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         )
+    else:
+        raise ValueError('Grid not recognized. Valid options are "flat", "sph", or "psph".')
     
     A = L_U
     RHS = -B_T@M
@@ -304,7 +355,7 @@ def random_walker(
     data                            : np.ndarray, 
     labels                          : np.ndarray,
     beta                            = 100.,
-    is_spherical                    = False, 
+    grid                            = None,
     solver                          = 'direct',
     solver_tol                      = 1e-3,
     max_beta_reduction_attempts     = 2,
@@ -329,12 +380,8 @@ def random_walker(
         the sharpness of the identified segments, but with the trade off of 
         possible destabilization of the linear system.
 
-    is_spherical : bool, default=False,
-        Whether to interpret the input 2D field as a Mercator projection of the 
-        surface of a 3D sphere (i.e., uniform spherical grid) or as a flat 2D 
-        surface (i.e., uniform rectilinear grid). If enabled, the wraparound 
-        connections are considered when constructing the RW linear system, as 
-        well as a metric correction on the connection weights.
+    grid : Grid, optional
+        An instance of the grid object to perform segmentation on.
      
     solver : str, default='direct',
         Choice of sparse linear solver. Possible options are:
@@ -371,7 +418,7 @@ def random_walker(
     represent the north and south poles such that each data[:, 0] and data[:, -1]
     slice contain the same values. Otherwise, unpredictable behavior may arise.
     """
-    if is_spherical:
+    if isinstance(grid, SphericalGrid):
         if not _labels_are_wraparound(labels):
             log.warning(
                 "The labels themselves do not appear to adhere to the azimuthal "
@@ -405,12 +452,12 @@ def random_walker(
         while attempt < max_beta_reduction_attempts + 1:
             log.debug(f"Constructing the linear system with beta={beta * (beta_reduction_fraction**attempt)}.")
             A, B, ord2org = get_AB(
-                data            = data,
-                labels          = labels,
-                beta            = beta * (beta_reduction_fraction**attempt),
-                num_labelled    = num_labelled,
-                largest_label   = largest_label,
-                is_spherical    = is_spherical
+                data             = data,
+                labels           = labels,
+                beta             = beta * (beta_reduction_fraction**attempt),
+                num_labelled     = num_labelled,
+                largest_label    = largest_label,
+                grid             = grid
             )
 
             log.debug("Solving the linear system.")
@@ -471,7 +518,8 @@ def random_walker(
         probs[:, -1] = probs[:, 0]
         del IDs_temp, probs_temp
 
-    else:
+    
+    elif (isinstance(grid, Grid)) or (grid is None):
         n_i, n_j    = data.shape
 
         data    = data.astype(dtype=_FLOAT, order='C', copy=False)
@@ -493,12 +541,12 @@ def random_walker(
         while attempt < max_beta_reduction_attempts + 1:
             log.debug(f"Constructing the linear system with beta={beta * (beta_reduction_fraction**attempt)}.")
             A, B, ord2org = get_AB(
-                data            = data,
-                labels          = labels,
-                beta            = beta * (beta_reduction_fraction**attempt),
-                num_labelled    = num_labelled,
-                largest_label   = largest_label,
-                is_spherical    = is_spherical
+                data             = data,
+                labels           = labels,
+                beta             = beta * (beta_reduction_fraction**attempt),
+                num_labelled     = num_labelled,
+                largest_label    = largest_label,
+                grid             = grid
             )
 
             log.debug("Solving the linear system.")
@@ -541,5 +589,8 @@ def random_walker(
             for j in range(j_max):
                 prob_vec        = full_probs[i, j, :]
                 probs[i, j]     = prob_vec[np.argmax(prob_vec)]
+    
+    else:
+        raise ValueError('Grid type not recognized. Valid options are "flat", "sph", or "psph".')
 
     return IDs, probs

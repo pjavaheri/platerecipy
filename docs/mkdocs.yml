@@ -1,0 +1,38 @@
+site_name: PlateRecipy
+repo_url: https://github.com/pjavaheri/platerecipy
+repo_name: pjavaheri/platerecipy
+theme:
+  name: material #material   # or "readthedocs"
+  palette:
+    # Color scheme (e.g., default, slate)
+    - scheme: default
+      # Primary color (e.g., indigo, green, red)
+      primary: black
+      # Accent color (e.g., amber, deep purple)
+      accent: amber
+  logo: media/logo-wtr.png
+  favicon: media/icon.png
+  features:
+    - navigation.tabs
+    #- toc.integrate
+nav:
+  - Home: index.md
+  - Installation: install.md
+  - User Guide: 
+    - Basic Usage: user_guide/basic_usage.md
+    - Example 1: user_guide/examples.md
+  - How to cite: cite.md
+extra:
+  version:
+    provider: readthedocs
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      linenums: true
+  - admonition
+  # If using the Material for MkDocs theme, you can also enable these for
+  # additional functionality like collapsible admonitions and nesting:
+  - pymdownx.details
+  - pymdownx.superfences
+extra_css:
+  - extra.css

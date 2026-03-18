@@ -480,7 +480,7 @@ void * gridded_fused_distance_threshold_transform_64bit_threaded_func(
     // first, only working with Cartesian distance
     const double THRESHOLD_D_SQUARED = 2.*targs->R*targs->R*(1. - cos(targs->threshold));
     
-    const double dlat = PI / ((double) targs->i_max); 
+    const double dlat = PI / ((double) targs->i_max - 1); 
     const int di = (int) (targs->threshold / dlat) + 2;        // +2 for a conservative
 
     for (int i = i_start; i < i_end; i++) {
@@ -561,6 +561,231 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
         );
     }
     
+    // waiting for all threads to be done
+    for (int i_thread=0; i_thread < num_threads; i_thread++) {
+        pthread_join(tids[i_thread], NULL);
+    }
+    return 0;
+}
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//     pgridded_fused_distance_threshold_transform
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/**
+ * The following set of functions are to be used when the fused distance 
+ * transform is applied on a 2D partially gridded array of booleans. In all, 
+ * the original array `arr` must be different from the output `arr_out`.
+ */
+
+int pgridded_fused_distance_threshold_transform_64bit(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int32_t     i_max,
+    int32_t     j_max,
+    double      R,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      threshold,
+    bool *      arr_out
+) {
+    // as a spherical grid, the first and last columns are the same
+
+    // first, only working with Cartesian distance
+    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
+    
+    const double dlat = (theta_max - theta_min) / ((double) (i_max - 1)); 
+    const int di = (int) (threshold / dlat) + 2;        // +2 for a conservative
+
+    for (int i = 0; i < i_max; i++) {
+        for (int j = 0; j < j_max; j++) {
+            const int ref_index = i*j_max + j;
+            if (arr[ref_index]) {
+                arr_out[ref_index] = true;
+
+                int i_start = 0;
+                int i_end   = i_max-1;
+
+                if ((i - di) > 0)         i_start = i - di;
+                if ((i + di) < i_max-1)   i_end   = i + di;
+
+                for (int ii = i_start; ii <= i_end; ii++) {
+                    for (int jj = 0; jj < j_max; jj++) {
+                        const int index = ii*j_max + jj;
+                        if (!arr_out[index]) {
+                            // the point [j] is not on the plate
+
+                            // crude checking whether to even bother with
+                            // spherical distance
+                            const double dx = xs[index] - xs[ref_index];
+                            const double dy = ys[index] - ys[ref_index];
+                            const double dz = zs[index] - zs[ref_index];
+                            const double d2 = dx*dx + dy*dy + dz*dz;
+                            
+                            arr_out[index] = d2 < THRESHOLD_D_SQUARED;
+                        }
+                    }
+                }
+            }    
+        }
+
+        // the first and last columns are the same
+        //arr_out[i*j_max + (j_max-1)] = arr_out[i*j_max];
+    }
+
+    return 0;
+}
+
+
+/**
+ * (internal)
+ * Argument struct for the threaded function:
+ * `pgridded_fused_distance_threshold_transform_64bit_threaded_func`
+ * The parameters are exactly as listed for:
+ * `pgridded_fused_distance_threshold_transform_64bit_threaded_func`
+ */
+struct pgridded_fused_distance_threshold_transform_64bit_threaded_args {
+    double *    xs;
+    double *    ys;
+    double *    zs;
+    bool *      arr;
+    int32_t     i_max;
+    int32_t     j_max;
+    double      R;
+    double      theta_min;
+    double      theta_max;
+    double      phi_min;
+    double      phi_max;
+    double      threshold;
+    bool *      arr_out;
+    int32_t     num_threads;
+    int32_t     i_thread;
+};
+
+/**
+ * (internal)
+ * Threaded function for `single_plate_interior_distance_transform_64bit_threaded`
+ * 
+ * @param args the argument struct containing function parameters
+ */
+void * pgridded_fused_distance_threshold_transform_64bit_threaded_func(
+    void * args
+) {
+    /**
+     * Assumes that plate_IDs are initialized with -1. and 0. :
+     *      -> -1. corresponds to the plate of interest
+     *      -> -2. corresponds to other plates
+     */
+
+    struct pgridded_fused_distance_threshold_transform_64bit_threaded_args * targs =
+        (struct pgridded_fused_distance_threshold_transform_64bit_threaded_args *) args;
+    
+    int i_start = (targs->i_max / targs->num_threads)*(targs->i_thread);
+    int i_end   = (targs->i_max / targs->num_threads)*(targs->i_thread +1);
+
+    // to prevent missing out due to division round downs
+    if (targs->i_thread == targs->num_threads - 1) {
+        i_end = targs->i_max;
+    }
+
+    // as a spherical grid, the first and last columns are the same
+
+    // first, only working with Cartesian distance
+    const double THRESHOLD_D_SQUARED = 2.*targs->R*targs->R*(1. - cos(targs->threshold));
+    
+    const double dlat = (targs->theta_max - targs->theta_min) / ((double) targs->i_max); 
+    const int di = (int) (targs->threshold / dlat) + 2;        // +2 for a conservative
+
+    for (int i = i_start; i < i_end; i++) {
+        for (int j = 0; j < targs->j_max; j++) {
+            const int ref_index = i*targs->j_max + j;
+            if (targs->arr[ref_index]) {
+                targs->arr_out[ref_index] = true;
+
+                int ii_start = 0;
+                int ii_end   = targs->i_max-1;
+
+                if ((i - di) > 0)               ii_start = i - di;
+                if ((i + di) < targs->i_max-1)  ii_end   = i + di;
+
+                for (int ii = ii_start; ii <= ii_end; ii++) {
+                    for (int jj = 0; jj < targs->j_max; jj++) {
+                        const int index = ii*targs->j_max + jj;
+                        if (!targs->arr_out[index]) {
+                            // the point [j] is not on the plate
+
+                            // crude checking whether to even bother with
+                            // spherical distance
+                            const double dx = targs->xs[index] - targs->xs[ref_index];
+                            const double dy = targs->ys[index] - targs->ys[ref_index];
+                            const double dz = targs->zs[index] - targs->zs[ref_index];
+                            const double d2 = dx*dx + dy*dy + dz*dz;
+                            
+                            targs->arr_out[index] = d2 < THRESHOLD_D_SQUARED;
+                        }
+                    }
+                }
+            }    
+        }
+
+        // the first and last columns are the same
+        //targs->arr_out[i*targs->j_max + (targs->j_max-1)] = 
+        //        targs->arr_out[i*targs->j_max];
+    }
+
+    return NULL;
+}
+
+
+int pgridded_fused_distance_threshold_transform_64bit_threaded(
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    bool *      arr,
+    int32_t     i_max,
+    int32_t     j_max,
+    double      R,
+    double      theta_min,
+    double      theta_max,
+    double      phi_min,
+    double      phi_max,
+    double      threshold,
+    bool *      arr_out,
+    int32_t     num_threads
+) {
+    pthread_t tids[num_threads];
+    struct pgridded_fused_distance_threshold_transform_64bit_threaded_args targss[num_threads];
+
+    for (int i_thread=0; i_thread < num_threads; i_thread++) {
+        targss[i_thread].xs             = xs;
+        targss[i_thread].ys             = ys;
+        targss[i_thread].zs             = zs;
+        targss[i_thread].arr            = arr;
+        targss[i_thread].i_max          = i_max;
+        targss[i_thread].j_max          = j_max;
+        targss[i_thread].R              = R;
+        targss[i_thread].theta_min      = theta_min;
+        targss[i_thread].theta_max      = theta_max;
+        targss[i_thread].phi_min        = phi_min;
+        targss[i_thread].phi_max        = phi_max;
+        targss[i_thread].threshold      = threshold;
+        targss[i_thread].arr_out        = arr_out;
+        targss[i_thread].num_threads    = num_threads;
+        targss[i_thread].i_thread       = i_thread;
+
+        // creating threads
+        pthread_create(
+            &tids[i_thread], 
+            NULL, 
+            pgridded_fused_distance_threshold_transform_64bit_threaded_func, 
+            &targss[i_thread]
+        );
+    }
+
     // waiting for all threads to be done
     for (int i_thread=0; i_thread < num_threads; i_thread++) {
         pthread_join(tids[i_thread], NULL);

@@ -11,7 +11,7 @@ from .model import PlateModel
 from .grid import convert_grid_to_mesh, SphericalGrid
 
 from scipy.io import savemat
-import pandas as pd
+from pandas import DataFrame
 import pyvista as pv
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -100,7 +100,7 @@ def save_as_csv(
     if other_fields is not None:
         for i in range(len(other_fields)):
             data[other_fields_names[i]] = other_fields[i].ravel()
-    pd.DataFrame(data).to_csv(filename)
+    DataFrame(data).to_csv(filename)
 
 
 
@@ -202,7 +202,7 @@ def save_mollweide_projection(
 
         # ~~~~~~~~ for the plate IDs ~~~~~~~~~
         ax = axes[1]
-        bounds = np.linspace(model.plate_IDs.min(), model.plate_IDs.max(), model.plate_IDs.max())
+        bounds = np.linspace(model.plate_IDs.min()-0.5, model.plate_IDs.max()+0.5, model.plate_IDs.max()+1)
         norm = mpl.colors.BoundaryNorm(boundaries=bounds, ncolors=256)
         pc = ax.pcolormesh(
             model.grid.phis, np.pi/2 - model.grid.thetas, model.plate_IDs, shading='nearest',
@@ -321,7 +321,7 @@ def save_six_view_angles(
         for i in range(6):
             ax = axes[i][1]
             pl = pv.Plotter(off_screen=True)
-            pl.window_size = [800,800]
+            pl.window_size = [800, 800]
             pl.add_mesh(mesh, style='surface', line_width=4, cmap='nipy_spectral', scalars='plate_IDs')
             pl.camera_position = camera_positions[i]
             #pl.show_axes()
@@ -339,11 +339,18 @@ def save_six_view_angles(
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes('bottom', size='5%', pad=0.05)
                 #fig.colorbar(im, cax=cax, cmap='coolwarm', orientation='horizontal', norm)
-                bounds = np.linspace(1, mesh['plate_IDs'].max(), mesh['plate_IDs'].max())
+                bounds = np.linspace(
+                    mesh['plate_IDs'].min(), 
+                    mesh['plate_IDs'].max(), 
+                    mesh['plate_IDs'].max() - mesh['plate_IDs'].min() + 1
+                )
                 norm = mpl.colors.BoundaryNorm(boundaries=bounds, ncolors=256)
                 c = ax.imshow(pl.screenshot(), cmap='nipy_spectral', norm=norm)
                 cbar = fig.colorbar(c, cax=cax, orientation='horizontal')
-                cbar.ax.set_xticks([1, mesh['plate_IDs'].max()])
+                cbar.ax.set_xticks([
+                    mesh['plate_IDs'].min(), 
+                    mesh['plate_IDs'].max()
+                ])
             else:
                 im = ax.imshow(pl.screenshot())
             ax.set_axis_off()

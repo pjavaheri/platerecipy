@@ -10,9 +10,10 @@ log = logging.getLogger(__name__)
 import numpy as np
 from scipy import ndimage
 
-from .transform import gridded_fused_distance_threshold_transform
+from .transform import gridded_fused_distance_threshold_transform, \
+                        pgridded_fused_distance_threshold_transform
 from .segmentation import random_walker
-from .grid import Grid, SphericalGrid
+from .grid import Grid, PartialSphericalGrid, SphericalGrid
 from . import _FLOAT
 
 
@@ -105,7 +106,7 @@ class PlateModel(object):
         self.grid = grid
         # if a spherical grid, wraparound azimuthally 
         self._wraparound_azimuthally = isinstance(grid, SphericalGrid)
-        self._use_spherical_distance = isinstance(grid, SphericalGrid)
+        self._use_spherical_distance = isinstance(grid, PartialSphericalGrid)
     
     @property
     def wraparound_azimuthally(self):
@@ -180,7 +181,7 @@ class PlateModel(object):
                 
         # if stack is empty
         if self.stacked_field is None:
-            self.stacked_field = field
+            self.stacked_field = field * stack_weight
         else:
             self.stacked_field += field * stack_weight
     
@@ -199,6 +200,7 @@ class PlateModel(object):
         num_threads             = 1,
         min_marker_size         = None,
         preserve_small_markers  = False,
+        manual_markers          = None,
         identify_nonconforming  = False,
         RW_beta                 = 100.,
         RW_solver_tolerance     = 1e-3,
@@ -258,6 +260,12 @@ class PlateModel(object):
         preserve_small_markers : bool, default=False
             Whether to reinstate small markers obscured by by the separation
             tolerance step.
+        
+        manual_markers : np.ndarray, optional
+            This option ignores all previous arguments relating to marker
+            specification. Instead, it allows the user to manually provide 
+            a 2D Boolean array of the same shape as `self.stacked_field` that 
+            indicates the seeds to the RW algorithm.
 
         identify_non_conforming : bool, default=False
             Whether to extract and separately label non-conforming regions 
@@ -285,70 +293,89 @@ class PlateModel(object):
         # normalizing the stacked fields
         self._normalize_stacked_field()
         
-        self.boundary_quantile_value = np.quantile(
-            self.stacked_field, 
-            [boundary_quantile]
-        )
-
-        self.boundary_absolute = boundary_absolute
-
-        # operating on a separate copy
-        self.stacked_field_for_segmentation = self.stacked_field.copy()
+        if manual_markers is not None:
+            self.markers = manual_markers
         
-        self.markers = (self.stacked_field_for_segmentation < self.boundary_quantile_value) \
-            & (self.stacked_field_for_segmentation < self.boundary_absolute)
-        
-        # filtering out micro markers
-        if min_marker_size is not None:
-            temp_labels = ndimage.label(self.markers)[0]
+        else:
 
-            # removing labels that have non-empty intersections
-            temp_unique_labels = np.unique(temp_labels)
+            self.boundary_quantile_value = np.quantile(
+                self.stacked_field, 
+                [boundary_quantile]
+            )
 
-            for label in temp_unique_labels:
-                if np.sum(temp_labels == label) < min_marker_size:
-                    self.markers[temp_labels == label] = False
+            self.boundary_absolute = boundary_absolute
+
+            # operating on a separate copy
+            self.stacked_field_for_segmentation = self.stacked_field.copy()
             
-            del temp_labels, temp_unique_labels
-        
-        if preserve_small_markers:
-            temp_pre_labels = ndimage.label(self.markers)[0]
-            if self.wraparound_azimuthally:
-                _unify_wraparound_labels(temp_pre_labels)
-        
-        if separation_tolerance is not None:
-            if self.use_spherical_distance:
-                # separation_tolerance is treated as radians on the great-circle
-                self.markers = ~gridded_fused_distance_threshold_transform(
-                    xs          = self.grid.xs, 
-                    ys          = self.grid.ys, 
-                    zs          = self.grid.zs,
-                    arr         = ~self.markers, 
-                    R           = self.grid.r,
-                    threshold   = separation_tolerance,
-                    num_threads = num_threads
-                )
-            else: 
-                pass
-                # planar distance transform with the separation_tolerance treated 
-                # as the distance in terms of unit grid spacing
-                self.markers = ~(
-                    ndimage.distance_transform_edt(
-                        input=~self.markers
-                    ) < separation_tolerance
-                )
-        
-        if preserve_small_markers:
-            temp_unique_labels = np.unique(temp_pre_labels)
-            temp_unique_labels = temp_unique_labels[temp_unique_labels>0]
+            self.markers = (self.stacked_field_for_segmentation < self.boundary_quantile_value) \
+                & (self.stacked_field_for_segmentation < self.boundary_absolute)
             
-            for label in temp_unique_labels:
-                temp_mask = (temp_pre_labels == label)
-                if not np.any(self.markers[temp_mask]):
-                    self.markers[temp_mask] = True
+            # filtering out micro markers
+            if min_marker_size is not None:
+                temp_labels = ndimage.label(self.markers)[0]
 
+                # removing labels that have non-empty intersections
+                temp_unique_labels = np.unique(temp_labels)
 
-        
+                for label in temp_unique_labels:
+                    if np.sum(temp_labels == label) < min_marker_size:
+                        self.markers[temp_labels == label] = False
+                
+                del temp_labels, temp_unique_labels
+            
+            if preserve_small_markers:
+                temp_pre_labels = ndimage.label(self.markers)[0]
+                if self.wraparound_azimuthally:
+                    _unify_wraparound_labels(temp_pre_labels)
+            
+            if separation_tolerance is not None:
+                if self.use_spherical_distance and self.wraparound_azimuthally:
+                    # full sphere
+                    # separation_tolerance is treated as radians on the great-circle
+                    self.markers = ~gridded_fused_distance_threshold_transform(
+                        xs          = self.grid.xs, 
+                        ys          = self.grid.ys, 
+                        zs          = self.grid.zs,
+                        arr         = ~self.markers, 
+                        R           = self.grid.r,
+                        threshold   = separation_tolerance,
+                        num_threads = num_threads
+                    )
+                elif self.use_spherical_distance:
+                    # a partial sphere
+                    self.markers = ~pgridded_fused_distance_threshold_transform(
+                        xs          = self.grid.xs, 
+                        ys          = self.grid.ys, 
+                        zs          = self.grid.zs,
+                        theta_range = self.grid.theta_range,
+                        phi_range   = self.grid.phi_range,
+                        arr         = ~self.markers, 
+                        R           = self.grid.r,
+                        threshold   = separation_tolerance,
+                        num_threads = num_threads
+                    )
+                else: 
+                    # a flat grid
+                    pass
+                    # planar distance transform with the separation_tolerance treated 
+                    # as the distance in terms of unit grid spacing
+                    self.markers = ~(
+                        ndimage.distance_transform_edt(
+                            input=~self.markers
+                        ) < separation_tolerance
+                    )
+            
+            if preserve_small_markers:
+                temp_unique_labels = np.unique(temp_pre_labels)
+                temp_unique_labels = temp_unique_labels[temp_unique_labels>0]
+                
+                for label in temp_unique_labels:
+                    temp_mask = (temp_pre_labels == label)
+                    if not np.any(self.markers[temp_mask]):
+                        self.markers[temp_mask] = True
+
+        # labeling the markers with positive integers
         labels, _ = ndimage.label(self.markers)
         
         if self.wraparound_azimuthally:
@@ -357,13 +384,14 @@ class PlateModel(object):
             _make_labels_sequential(labels)
         
         # handling both spherical and planar cases
+
         self.plate_IDs, self.ID_probs = random_walker(
-            data            = self.stacked_field_for_segmentation,
-            labels          = labels,
-            beta            = RW_beta,
-            solver_tol      = RW_solver_tolerance,
-            solver          = RW_solver,
-            is_spherical    = self.wraparound_azimuthally
+            data             = self.stacked_field_for_segmentation,
+            labels           = labels,
+            beta             = RW_beta,
+            solver_tol       = RW_solver_tolerance,
+            solver           = RW_solver,
+            grid             = self.grid
         )
         
         if identify_nonconforming:
