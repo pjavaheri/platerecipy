@@ -20,7 +20,7 @@ logging.config.dictConfig({
     },
     "loggers": {
         "platerecipy": {  
-            "level": "DEBUG", #"INFO", # "DEBUG"
+            "level": "INFO", # "DEBUG"
             "handlers": ["console"],
             "propagate": False, # to prevent it from propagating through root
         },
