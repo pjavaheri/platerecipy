@@ -35,4 +35,4 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.superfences
 extra_css:
-  - docs/extra.css
+  - extra.css

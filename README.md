@@ -22,7 +22,7 @@ python -m pip install platerecipy
 
 ## User guide
 
-`platerecipy`'s documentation is moved to [platerecipy.readthedocs.com](platerecipy.readthedocs.com)!
+`platerecipy`'s documentation is moved to [platerecipy.readthedocs.com](platerecipy.readthedocs.io)!
 
 For a detailed explanation and illustration of `platerecipy`'s core functionalities,
 please refer to:
