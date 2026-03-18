@@ -2,10 +2,6 @@
 
 # Basic Usage
 
-The user manual can be found under `doc` as a LaTeX source file. It 
-includes general information about the package, function/class documentations, 
-as well as a number of examples to be used as recipes!
-
 As a demonstration, assuming a given `input_xs`, `input_ys`, `input_zs`, and  
 `input_field` (all `numpy` arrays), using `platerecipy` is as simple as follows:
 
