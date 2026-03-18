@@ -24,7 +24,7 @@ platerecipy_clib_segmentation_module = Extension(
 
 setup(
     name = 'platerecipy',
-    version = '1.1.0',
+    version = '1.1.1',
     description = 'PLATE RECognition In PYthon',
     long_description = 
         'platerecipy is a tool for detecting candidate plates on global geophysical ' 
