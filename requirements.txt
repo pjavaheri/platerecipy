@@ -1,7 +1,6 @@
 numpy
 scipy
 matplotlib
-pyvista
 pandas
 mkdocs
 mkdocs-material

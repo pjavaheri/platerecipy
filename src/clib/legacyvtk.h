@@ -34,7 +34,7 @@ int make_rectangular_vtk_grid(
 );
 
 /**
- * Adds field data to an already initialized ASCII VTK file.
+ * Adds a float field data to an already initialized ASCII VTK file.
  * 
  * @note This function can be used for both a rectangular grid and a partial
  * spherical grid.
@@ -45,10 +45,30 @@ int make_rectangular_vtk_grid(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_rectangular_vtk_field(
+int add_rectangular_vtk_float_field(
     char *      adr,
     char *      field_name,
     double *    field,
+    int32_t     i_max,
+    int32_t     j_max
+);
+
+/**
+ * Adds an int field data to an already initialized ASCII VTK file.
+ * 
+ * @note This function can be used for both a rectangular grid and a partial
+ * spherical grid.
+ * 
+ * @param adr string address of the vtk output file
+ * @param field_name string name of the field
+ * @param field array of field data
+ * @param i_max extent along the first dimension
+ * @param j_max extent along the second dimension
+ */
+int add_rectangular_vtk_int_field(
+    char *      adr,
+    char *      field_name,
+    int32_t *   field,
     int32_t     i_max,
     int32_t     j_max
 );
@@ -91,10 +111,32 @@ int make_spherical_vtk_grid(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_spherical_vtk_field(
+int add_spherical_vtk_float_field(
     char *      adr,
     char *      field_name,
     double *    field,
+    int32_t     i_max,
+    int32_t     j_max
+);
+
+/**
+ * Adds field data to an already initialized ASCII VTK file.
+ * 
+ * @note This function can only be used for a spherical grid.
+ * @warning The input data must be structured so that the first and last row 
+ * correspond to the north and south poles, and the last column is equal to the 
+ * first column (thus ignored).
+ * 
+ * @param adr string address of the vtk output file
+ * @param field_name string name of the field
+ * @param field array of field data
+ * @param i_max extent along the first dimension
+ * @param j_max extent along the second dimension
+ */
+int add_spherical_vtk_int_field(
+    char *      adr,
+    char *      field_name,
+    int32_t *   field,
     int32_t     i_max,
     int32_t     j_max
 );

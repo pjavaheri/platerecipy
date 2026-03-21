@@ -18,6 +18,18 @@ double mean(double * a, int N) {
     return avg/N;
 }
 
+/**
+ * (Internal)
+ * Array mean calculator.
+ */
+int32_t mean_int(int32_t * a, int N) {
+    int32_t avg = 0.;
+    for (int i = 0; i < N; i++) {
+        avg += a[i];
+    }
+    return avg/N;
+}
+
 int make_rectangular_vtk_grid(
     char * adr,
     double * xs,
@@ -86,7 +98,7 @@ int make_rectangular_vtk_grid(
     return 0;
 }
 
-int add_rectangular_vtk_field(
+int add_rectangular_vtk_float_field(
     char * adr,
     char * field_name,
     double * field,
@@ -109,6 +121,39 @@ int add_rectangular_vtk_field(
             fprintf(
                 fptr,
                 "%e\n", 
+                field[i*j_max + j]
+            );
+        }
+    }
+
+    fclose(fptr);
+
+    return 0;
+}
+
+int add_rectangular_vtk_int_field(
+    char * adr,
+    char * field_name,
+    int32_t * field,
+    int32_t i_max,
+    int32_t j_max
+) {
+    FILE * fptr = fopen(adr, "a");
+
+    if (fptr == NULL) {
+        printf("Error opening file!\n");
+        exit(1);
+    }
+    fprintf(
+        fptr,
+        "\nSCALARS %s int 1\nLOOKUP_TABLE default\n", 
+        field_name
+    );
+    for (int i = 0; i < i_max; i++) {
+        for (int j = 0; j < j_max; j++) {
+            fprintf(
+                fptr,
+                "%d\n", 
                 field[i*j_max + j]
             );
         }
@@ -249,7 +294,7 @@ int make_spherical_vtk_grid(
     return 0;
 }
 
-int add_spherical_vtk_field(
+int add_spherical_vtk_float_field(
     char * adr,
     char * field_name,
     double * field,
@@ -278,6 +323,41 @@ int add_spherical_vtk_field(
     }
     fprintf(fptr, "%e\n", mean(field, i_max));
     fprintf(fptr, "%e\n", mean(field + (i_max-1)*j_max, i_max));
+
+    fclose(fptr);
+
+    return 0;
+}
+
+int add_spherical_vtk_int_field(
+    char * adr,
+    char * field_name,
+    int32_t * field,
+    int32_t i_max,
+    int32_t j_max
+) {
+    FILE * fptr = fopen(adr, "a");
+
+    if (fptr == NULL) {
+        printf("Error opening file!\n");
+        exit(1);
+    }
+    fprintf(
+        fptr,
+        "\nSCALARS %s int 1\nLOOKUP_TABLE default\n", 
+        field_name
+    );
+    for (int i = 1; i < i_max-1; i++) {
+        for (int j = 0; j < j_max-1; j++) {
+            fprintf(
+                fptr,
+                "%d\n", 
+                field[i*j_max + j]
+            );
+        }
+    }
+    fprintf(fptr, "%d\n", mean_int(field, i_max));
+    fprintf(fptr, "%d\n", mean_int(field + (i_max-1)*j_max, i_max));
 
     fclose(fptr);
 

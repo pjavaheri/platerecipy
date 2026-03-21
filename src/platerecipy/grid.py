@@ -9,7 +9,6 @@ log = logging.getLogger(__name__)
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-import pyvista as pv
 from pandas import DataFrame
 
 from . import _FLOAT
@@ -41,6 +40,12 @@ def convert_grid_to_mesh(
 
     """
     log.debug("Converting the grid to a pyvsita mesh ...")
+
+    try:
+        import pyvista as pv
+    except ImportError:
+        raise ImportError("For VTP and six-view-plots, packages `vtk` and `pyvista` are required.")
+
     # setting up the mesh according to the first field
     gridded_field, field_name = gridded_fields[0], field_names[0]
     # since pyvista wants [0,360] not [-90,90]

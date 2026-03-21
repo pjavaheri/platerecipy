@@ -9,10 +9,10 @@ log = logging.getLogger(__name__)
 
 from .model import PlateModel
 from .grid import convert_grid_to_mesh, SphericalGrid
+from .legacyvtk import make_rectangular_vtk, make_spherical_vtk
 
 from scipy.io import savemat
 from pandas import DataFrame
-import pyvista as pv
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -63,6 +63,64 @@ def save_as_mat(
         do_compression      = False,
         oned_as             = 'row',
     )
+
+def save_as_vtk(
+    model               : PlateModel,
+    other_fields        = None,
+    other_fields_names  = None,
+    filename            = 'platerecipy_output.vtk'
+):
+    """
+    To save the interpolated model as VTK ParaView-readable file.
+
+    Parameters
+    ----------
+    model : PlateModel,
+        An input model whose plates are identified.
+
+    other_fields : list, optional,
+        A list of additional fields to be included in the output.
+
+    other_fields_names : list, optional,
+        A list of field identifiers corresponding to `other_fields`.
+    
+    filename : str, default='platerecipy_output.vtk'
+        Output filename.
+    
+    Returns
+    -------
+    `None`
+    """
+    if other_fields is not None:
+        other_fields.append(model.plate_IDs)
+        other_fields.append(model.ID_probs)
+        other_fields.append(model.stacked_field)
+        other_fields_names.append('plate_IDs')
+        other_fields_names.append('ID_probs')
+        other_fields_names.append('stacked_field')
+    else:
+        other_fields = [model.plate_IDs, model.ID_probs, model.stacked_field]
+        other_fields_names = ['plate_IDs', 'ID_probs', 'stacked_field']
+
+    if isinstance(model.grid, SphericalGrid):
+        make_spherical_vtk(
+            fname       = filename,
+            xs          = model.grid.xs,
+            ys          = model.grid.ys,
+            zs          = model.grid.zs,
+            fields      = other_fields,
+            field_names = other_fields_names
+        )
+    else:
+        make_rectangular_vtk(
+            fname       = filename,
+            xs          = model.grid.xs,
+            ys          = model.grid.ys,
+            zs          = model.grid.zs,
+            fields      = other_fields,
+            field_names = other_fields_names
+        )
+
 
 
 
@@ -135,6 +193,11 @@ def save_as_vtp(
     -------
     `None` or a `pyvista` mesh
     """
+    try:
+        import pyvista as pv
+    except ImportError:
+        raise ImportError("For VTP and six-view-plots, packages `vtk` and `pyvista` are required.")
+    
     if other_fields is not None:
         other_fields.append(model.plate_IDs)
         other_fields.append(model.ID_probs)
@@ -250,7 +313,11 @@ def save_six_view_angles(
     filename : str, default='platerecipy_six_angle_output.png'
         Output filename.
     """
-
+    try:
+        import pyvista as pv
+    except ImportError:
+        raise ImportError("For VTP and six-view-plots, packages `vtk` and `pyvista` are required.")
+    
     if not isinstance(model.grid, SphericalGrid):
         raise ValueError('Bad input. Only a spherical model can have six angle view output.')
     

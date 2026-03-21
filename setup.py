@@ -22,9 +22,18 @@ platerecipy_clib_segmentation_module = Extension(
     extra_compile_args=extra_compile_args,
 )
 
+platerecipy_clib_legacyvtk_module = Extension(
+    'platerecipy_clib_legacyvtk',
+    sources = [
+        'src/clib/legacyvtk.c'
+    ],
+    include_dirs = ['src/clib'],
+    extra_compile_args=extra_compile_args,
+)
+
 setup(
     name = 'platerecipy',
-    version = '1.2.2',
+    version = '2.0.0',
     description = 'PLATE RECognition In PYthon',
     long_description = 
         'platerecipy is a tool for detecting candidate plates on global geophysical ' 
@@ -40,13 +49,16 @@ setup(
     install_requires = [
         'numpy', 
         'scipy',
-        'matplotlib', 
-        'pyvista',
+        'matplotlib',
         'pandas'
     ],
+    extras_require={
+        'vtp': ['vtk', 'pyvista']
+    },
     ext_modules = [
         platerecipy_clib_transform_module,
-        platerecipy_clib_segmentation_module
+        platerecipy_clib_segmentation_module,
+        platerecipy_clib_legacyvtk_module
     ],
     zip_safe = False
 )
