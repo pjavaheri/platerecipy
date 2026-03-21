@@ -1,3 +1,9 @@
+/**
+ * @file segmentation.c
+ * @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
+ * @brief Definitions for image segmentation
+ */
+
 #include "segmentation.h"
 
 /**
