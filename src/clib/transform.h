@@ -12,11 +12,13 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <pthread.h>
+#if defined(_WIN32)
+    #define CLIB_EXPORT __declspec(dllexport)
+#else
+    #define CLIB_MULTITHREADED
+    #define CLIB_EXPORT
+    #include <pthread.h>
+#endif
 
 // Pi
 const double PI     = 3.14159265358979323846;
@@ -54,7 +56,7 @@ const double PI_4   = 0.78539816339744830962;
  * @warning `arr_out` must be initialized with `-1` for the plate of interest 
  *          and `-2` for all other plates/regions.
  */
-int single_plate_interior_distance_transform_64bit(
+CLIB_EXPORT int single_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -63,6 +65,7 @@ int single_plate_interior_distance_transform_64bit(
     double *    arr_out
 );
 
+#ifdef CLIB_MULTITHREADED
 /**
  * Finds the spherical (geodesic) distance transform for a single plate. 
  * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
@@ -81,7 +84,7 @@ int single_plate_interior_distance_transform_64bit(
  * @warning `arr_out` must be initialized with `-1` for the plate of interest 
  *          and `-2` for all other plates/regions.
  */
-int single_plate_interior_distance_transform_64bit_threaded(
+CLIB_EXPORT int single_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -90,7 +93,7 @@ int single_plate_interior_distance_transform_64bit_threaded(
     double *    arr_out,
     int32_t     num_threads
 );
-
+#endif
 
 
 
@@ -117,7 +120,7 @@ int single_plate_interior_distance_transform_64bit_threaded(
  * 
  * @returns 0 if no error
  */
-int full_plate_interior_distance_transform_64bit(
+CLIB_EXPORT int full_plate_interior_distance_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -127,6 +130,7 @@ int full_plate_interior_distance_transform_64bit(
     double *    arr_out
 );
 
+#ifdef CLIB_MULTITHREADED
 /**
  * Finds the spherical (geodesic) distance transform for all plates. 
  * 
@@ -141,7 +145,7 @@ int full_plate_interior_distance_transform_64bit(
  * 
  * @returns 0 if no error
  */
-int full_plate_interior_distance_transform_64bit_threaded(
+CLIB_EXPORT int full_plate_interior_distance_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -151,6 +155,7 @@ int full_plate_interior_distance_transform_64bit_threaded(
     double *    arr_out,
     int32_t     num_threads
 );
+#endif
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //     fused_distance_threshold_transform
@@ -179,7 +184,7 @@ int full_plate_interior_distance_transform_64bit_threaded(
  * 
  * @returns 0 if no error
  */
-int fused_distance_threshold_transform_64bit(
+CLIB_EXPORT int fused_distance_threshold_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -220,7 +225,7 @@ int fused_distance_threshold_transform_64bit(
  * 
  * @returns 0 if no error
  */
-int gridded_fused_distance_threshold_transform_64bit(
+CLIB_EXPORT int gridded_fused_distance_threshold_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -232,6 +237,7 @@ int gridded_fused_distance_threshold_transform_64bit(
     bool *      arr_out
 );
 
+#ifdef CLIB_MULTITHREADED
 /**
  * Performs a distance transform and applies a threshold transform such that 
  * the resulting array contains `true` for all points withing the distance 
@@ -251,7 +257,7 @@ int gridded_fused_distance_threshold_transform_64bit(
  * 
  * @returns 0 if no error
  */
-int gridded_fused_distance_threshold_transform_64bit_threaded(
+CLIB_EXPORT int gridded_fused_distance_threshold_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -263,7 +269,7 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
     bool *      arr_out,
     int32_t     num_threads
 );
-
+#endif
 
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -300,7 +306,7 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
  * 
  * @returns 0 if no error
  */
-int pgridded_fused_distance_threshold_transform_64bit(
+CLIB_EXPORT int pgridded_fused_distance_threshold_transform_64bit(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -316,6 +322,7 @@ int pgridded_fused_distance_threshold_transform_64bit(
     bool *      arr_out
 );
 
+#ifdef CLIB_MULTITHREADED
 /**
  * Performs a distance transform and applies a threshold transform such that 
  * the resulting array contains `true` for all points withing the distance 
@@ -339,7 +346,7 @@ int pgridded_fused_distance_threshold_transform_64bit(
  * 
  * @returns 0 if no error
  */
-int pgridded_fused_distance_threshold_transform_64bit_threaded(
+CLIB_EXPORT int pgridded_fused_distance_threshold_transform_64bit_threaded(
     double *    xs,
     double *    ys,
     double *    zs,
@@ -355,5 +362,6 @@ int pgridded_fused_distance_threshold_transform_64bit_threaded(
     bool *      arr_out,
     int32_t     num_threads
 );
+#endif
 
 #endif

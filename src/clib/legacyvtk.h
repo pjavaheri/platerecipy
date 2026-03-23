@@ -10,6 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#if defined(_WIN32)
+    #define CLIB_EXPORT __declspec(dllexport)
+#else
+    #define CLIB_EXPORT
+#endif
 
 /**
  * Initializes an ASCII VTK file and sets up a mesh grid (points + faces).
@@ -24,7 +29,7 @@
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int make_rectangular_vtk_grid(
+CLIB_EXPORT int make_rectangular_vtk_grid(
     char *      adr,
     double *    xs,
     double *    ys,
@@ -45,7 +50,7 @@ int make_rectangular_vtk_grid(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_rectangular_vtk_float_field(
+CLIB_EXPORT int add_rectangular_vtk_float_field(
     char *      adr,
     char *      field_name,
     double *    field,
@@ -65,7 +70,7 @@ int add_rectangular_vtk_float_field(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_rectangular_vtk_int_field(
+CLIB_EXPORT int add_rectangular_vtk_int_field(
     char *      adr,
     char *      field_name,
     int32_t *   field,
@@ -88,7 +93,7 @@ int add_rectangular_vtk_int_field(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int make_spherical_vtk_grid(
+CLIB_EXPORT int make_spherical_vtk_grid(
     char *      adr,
     double *    xs,
     double *    ys,
@@ -111,7 +116,7 @@ int make_spherical_vtk_grid(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_spherical_vtk_float_field(
+CLIB_EXPORT int add_spherical_vtk_float_field(
     char *      adr,
     char *      field_name,
     double *    field,
@@ -133,7 +138,7 @@ int add_spherical_vtk_float_field(
  * @param i_max extent along the first dimension
  * @param j_max extent along the second dimension
  */
-int add_spherical_vtk_int_field(
+CLIB_EXPORT int add_spherical_vtk_int_field(
     char *      adr,
     char *      field_name,
     int32_t *   field,

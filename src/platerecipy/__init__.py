@@ -38,3 +38,5 @@ from numpy import int32, float64
 _INT     = int32
 _FLOAT   = float64
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import sys
+_IS_WINDOWS = (sys.platform == 'win32')

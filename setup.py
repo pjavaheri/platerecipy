@@ -1,8 +1,12 @@
 from setuptools import setup, Extension, find_packages
+import sys
 
-extra_compile_args=[
-    '-O3','-std=c99', '-fPIC', '-DLIBCTOOLS'
-]
+if sys.platform == 'win32':
+    extra_compile_args = ["/O2", '-DLIBCTOOLS']
+else:
+    extra_compile_args = [
+        '-O3','-std=c99', '-fPIC', '-DLIBCTOOLS'
+    ]
 
 platerecipy_clib_transform_module = Extension(
     'platerecipy_clib_transform',
@@ -49,8 +53,7 @@ setup(
     install_requires = [
         'numpy', 
         'scipy',
-        'matplotlib',
-        'pandas'
+        'matplotlib'
     ],
     extras_require={
         'vtp': ['vtk', 'pyvista']

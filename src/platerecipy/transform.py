@@ -11,7 +11,7 @@ import os
 import ctypes
 import numpy as np
 
-from . import _INT, _FLOAT
+from . import _INT, _FLOAT, _IS_WINDOWS
 
 # importing shared libraries
 import sysconfig
@@ -69,6 +69,10 @@ def single_plate_interior_distance_transform(
         np.ndarray
 
     """
+    if _IS_WINDOWS:
+        log.info("Multithreaded functionalities are not available on Windows and `num_threads` will be ignored.")
+        num_threads = 1
+
     if R is None:
         R = np.mean(np.sqrt(np.pow(xs**2 + ys**2 + zs**2, 0.5)))
 
@@ -147,6 +151,10 @@ def full_plate_interior_distance_transform(
     -------
         np.ndarray
     """
+    if _IS_WINDOWS:
+        log.info("Multithreaded functionalities are not available on Windows and `num_threads` will be ignored.")
+        num_threads = 1
+
     if R is None:
         R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))
 
@@ -301,6 +309,10 @@ def gridded_fused_distance_threshold_transform(
         np.ndarray
 
     """
+    if _IS_WINDOWS:
+        log.info("Multithreaded functionalities are not available on Windows and `num_threads` will be ignored.")
+        num_threads = 1
+
     if R is None:
         log.debug("No radius provided. Estimating it from the node coordinates.")
         R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))
@@ -405,6 +417,10 @@ def pgridded_fused_distance_threshold_transform(
         np.ndarray
 
     """
+    if _IS_WINDOWS:
+        log.info("Multithreaded functionalities are not available on Windows and `num_threads` will be ignored.")
+        num_threads = 1
+        
     if R is None:
         log.debug("No radius provided. Estimating it from the node coordinates.")
         R = np.mean(np.sqrt(xs**2 + ys**2 + zs**2))

@@ -55,7 +55,7 @@ int single_plate_interior_distance_transform_64bit(
 }
 
 
-
+#ifdef CLIB_MULTITHREADED
 /**
  * (internal)
  * Argument struct for the threaded function:
@@ -175,6 +175,7 @@ int single_plate_interior_distance_transform_64bit_threaded(
 
     return 0;
 }
+#endif
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //       full_plate_interior_distance_transform
@@ -194,10 +195,6 @@ int full_plate_interior_distance_transform_64bit(
     double      R,
     double *    arr_out
 ) {
-    FILE * f = fopen("stdout.txt", "w");
-    fprintf(f, "in C: num_points = %d\n", num_points);
-    fclose(f);
-
     // first, only working with Cartesian distance
     const double ONE_OVER_TWO_R_SQUARED = 1./(2.*R*R);
     const double MAX_CARTESIAN_DISTANCE = 4.*R*R;
@@ -225,6 +222,7 @@ int full_plate_interior_distance_transform_64bit(
     return 0;
 }
 
+#ifdef CLIB_MULTITHREADED
 /**
  * (internal)
  * Threaded function for `full_plate_interior_distance_transform_64bit_threaded`
@@ -315,6 +313,7 @@ int full_plate_interior_distance_transform_64bit_threaded(
 
     return 0;
 }
+#endif
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //     fused_distance_threshold_transform
@@ -428,6 +427,7 @@ int gridded_fused_distance_threshold_transform_64bit(
     return 0;
 }
 
+#ifdef CLIB_MULTITHREADED
 /**
  * (internal)
  * Argument struct for the threaded function:
@@ -567,7 +567,7 @@ int gridded_fused_distance_threshold_transform_64bit_threaded(
     }
     return 0;
 }
-
+#endif
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //     pgridded_fused_distance_threshold_transform
@@ -640,7 +640,7 @@ int pgridded_fused_distance_threshold_transform_64bit(
     return 0;
 }
 
-
+#ifdef CLIB_MULTITHREADED
 /**
  * (internal)
  * Argument struct for the threaded function:
@@ -792,3 +792,4 @@ int pgridded_fused_distance_threshold_transform_64bit_threaded(
     }
     return 0;
 }
+#endif

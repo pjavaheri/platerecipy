@@ -7,12 +7,12 @@
 import logging
 log = logging.getLogger(__name__)
 
+from . import _INT
 from .model import PlateModel
 from .grid import convert_grid_to_mesh, SphericalGrid
 from .legacyvtk import make_rectangular_vtk, make_spherical_vtk
 
 from scipy.io import savemat
-from pandas import DataFrame
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -148,17 +148,59 @@ def save_as_csv(
         Output filename.
     """
 
-    data = {
-        'plate_IDs'     : model.plate_IDs.ravel(),
-        'stacked_field' : model.stacked_field.ravel(),
-        'xs'            : model.grid.xs.ravel(),
-        'xy'            : model.grid.ys.ravel(),
-        'xz'            : model.grid.zs.ravel()
-    }
     if other_fields is not None:
-        for i in range(len(other_fields)):
-            data[other_fields_names[i]] = other_fields[i].ravel()
-    DataFrame(data).to_csv(filename)
+        other_fields.append(model.plate_IDs)
+        other_fields.append(model.ID_probs)
+        other_fields.append(model.stacked_field)
+        other_fields.append(model.grid.xs)
+        other_fields.append(model.grid.ys)
+        other_fields.append(model.grid.zs)
+
+        other_fields_names.append('plate_IDs')
+        other_fields_names.append('ID_probs')
+        other_fields_names.append('stacked_field')
+        other_fields_names.append('xs')
+        other_fields_names.append('ys')
+        other_fields_names.append('zs')
+    else:
+        other_fields = [
+            model.plate_IDs.ravel(), 
+            model.ID_probs.ravel(), 
+            model.stacked_field.ravel(),
+            model.grid.xs.ravel(),
+            model.grid.ys.ravel(),
+            model.grid.zs.ravel()
+        ]
+        
+        other_fields_names = [
+            'plate_IDs', 
+            'ID_probs', 
+            'stacked_field', 
+            'xs', 
+            'ys', 
+            'zs'
+        ]
+    
+    fmtstr = ""
+    for i in range(len(other_fields)):
+        if other_fields[i].dtype == _INT:
+            fmtstr += "{" + str(i) + ":d},"
+        else:
+            fmtstr += "{" + str(i) + ":.7e},"
+    fmtstr = fmtstr[:-1] + '\n'
+
+    with open(filename, 'w') as outfile:
+        header = ""
+        for var in other_fields_names:
+            header += f"{var},"
+        header = header[:-1] + '\n'
+        outfile.write(header)
+        for i in range(model.grid.xs.size-1):
+            outfile.write(
+                fmtstr.format(
+                    *tuple(arr[i] for arr in other_fields)
+                )
+            )
 
 
 

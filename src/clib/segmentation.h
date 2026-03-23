@@ -12,12 +12,11 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <pthread.h>
-
+#if defined(_WIN32)
+    #define CLIB_EXPORT __declspec(dllexport)
+#else
+    #define CLIB_EXPORT
+#endif
 
 // Pi
 const double PI     = 3.14159265358979323846;
@@ -54,7 +53,7 @@ const double BIG    = 1e6;
  *           2*( (n_i-1)*n_j + n_i*(n_j-1) ) 
  * @warning `edges` will be updated
  */
-int populate_edges(
+CLIB_EXPORT int populate_edges(
     int32_t *   edges,
     int32_t     n_i,
     int32_t     n_j
@@ -78,7 +77,7 @@ int populate_edges(
  *           2*( (2*n_i-3)*n_j ) 
  * @warning `edges` will be updated
  */
-int populate_edges_sph(
+CLIB_EXPORT int populate_edges_sph(
     int32_t *   edges,
     int32_t     n_i,
     int32_t     n_j
@@ -103,7 +102,7 @@ int populate_edges_sph(
  *           2*( (n_i-1)*n_j + n_i*(n_j-1) ) 
  * @warning arrays `rows`, `columns`, and `values` will be updated.
  */
-int get_Laplacian_from_edges(
+CLIB_EXPORT int get_Laplacian_from_edges(
     double *    image,
     int32_t *   edges,
     int32_t     n_i,
@@ -139,7 +138,7 @@ int get_Laplacian_from_edges(
  *           2*( (n_i-1)*n_j + n_i*(n_j-1) ) 
  * @warning arrays `rows`, `columns`, and `values` will be updated.
  */
-int get_Laplacian_from_edges_psph(
+CLIB_EXPORT int get_Laplacian_from_edges_psph(
     double *    image,
     int32_t *   edges,
     int32_t     n_i,
@@ -175,7 +174,7 @@ int get_Laplacian_from_edges_psph(
  *           2*( (2*n_i-3)*n_j ) 
  * @warning arrays `rows`, `columns`, and `values` will be updated.
  */
-int get_Laplacian_from_edges_sph(
+CLIB_EXPORT int get_Laplacian_from_edges_sph(
     double *    image,
     int32_t *   edges,
     int32_t     n_i,
@@ -202,7 +201,7 @@ int get_Laplacian_from_edges_sph(
  
  * @warning arrays `org2ord` and `ord2org` will be updated.
  */
-int get_original_to_ordered_mapping(
+CLIB_EXPORT int get_original_to_ordered_mapping(
     int32_t *   labels,
     int32_t     n_i,
     int32_t     n_j,
@@ -228,7 +227,7 @@ int get_original_to_ordered_mapping(
  * @warning the conversion vectors are shifted on the original ordering as the 
  *          first item is at n_j-1 (i.e., the north pole).
  */
-int get_original_to_ordered_mapping_sph(
+CLIB_EXPORT int get_original_to_ordered_mapping_sph(
     int32_t *   labels,
     int32_t     n_i,
     int32_t     n_j,
@@ -252,7 +251,7 @@ int get_original_to_ordered_mapping_sph(
  * @warning `rows_ord` and `columns_ord` must be allocated arrays of size: n_i*n_j
  * @warning  arrays `rows_ord` and `columns_ord` will be updated.
  */
-int order_Laplacian(
+CLIB_EXPORT int order_Laplacian(
     int32_t *   org2ord,
     int32_t *   rows,
     int32_t *   columns,
@@ -281,7 +280,7 @@ int order_Laplacian(
  * @warning the conversion vectors are to be shifted on the original ordering as the 
  *          first item is at n_j-1 (i.e., the north pole).
  */
-int order_Laplacian_sph(
+CLIB_EXPORT int order_Laplacian_sph(
     int32_t *   org2ord,
     int32_t *   rows,
     int32_t *   columns,
@@ -316,7 +315,7 @@ int order_Laplacian_sph(
  * @param values vector carrying the corresponding value
  * @param ord2org vector mapping original ordering to sorted ordering
  */
-int get_ordered_Laplacian_vectors(
+CLIB_EXPORT int get_ordered_Laplacian_vectors(
     double *    data,
     int32_t *   labels,
     int32_t     n_i,
@@ -354,7 +353,7 @@ int get_ordered_Laplacian_vectors(
  * @param values vector carrying the corresponding value
  * @param ord2org vector mapping original ordering to sorted ordering
  */
-int get_ordered_Laplacian_vectors_psph(
+CLIB_EXPORT int get_ordered_Laplacian_vectors_psph(
     double *    data,
     int32_t *   labels,
     int32_t     n_i,
@@ -397,7 +396,7 @@ int get_ordered_Laplacian_vectors_psph(
  * @param values vector carrying the corresponding value
  * @param ord2org vector mapping original ordering to sorted ordering
  */
-int get_ordered_Laplacian_vectors_sph(
+CLIB_EXPORT int get_ordered_Laplacian_vectors_sph(
     double *    data,
     int32_t *   labels,
     int32_t     n_i,
@@ -424,7 +423,7 @@ int get_ordered_Laplacian_vectors_sph(
  * @param largest_label largest label (also equal to the number of segments)
  * @param M the matrix applying unit test potentials
  */
-int get_ordered_boundary_matrix(
+CLIB_EXPORT int get_ordered_boundary_matrix(
     int32_t *   labels,
     int32_t *   ord2org,
     int32_t     n_i,
@@ -452,7 +451,7 @@ int get_ordered_boundary_matrix(
  * @param largest_label largest label (also equal to the number of segments)
  * @param M the matrix applying unit test potentials
  */
-int get_ordered_boundary_matrix_sph(
+CLIB_EXPORT int get_ordered_boundary_matrix_sph(
     int32_t *   labels,
     int32_t *   ord2org,
     int32_t     n_i,
@@ -477,7 +476,7 @@ int get_ordered_boundary_matrix_sph(
  * @param IDs array of IDs
  * @param probs array of probabilities 
  */
-int get_IDs_and_probs_from_X(
+CLIB_EXPORT int get_IDs_and_probs_from_X(
     double *    X,
     int32_t     X_i_max,
     int32_t     X_j_max,
@@ -509,7 +508,7 @@ int get_IDs_and_probs_from_X(
  * @param IDs array of IDs
  * @param probs array of probabilities 
  */
-int get_IDs_and_probs_from_X_sph(
+CLIB_EXPORT int get_IDs_and_probs_from_X_sph(
     double *    X,
     int32_t     X_i_max,
     int32_t     X_j_max,
