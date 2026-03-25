@@ -1,4 +1,4 @@
-![logo](logo.png)
+![logo](https://github.com/pjavaheri/platerecipy/raw/master/logo.png)
 
 # `platerecipy`: a package for PLATE RECognition In PYthon
 `platerecipy` is a tool for detecting candidate plates on global geophysical 
@@ -8,9 +8,9 @@ as well as regions with low confidence in plate assignment.
 ## Supported platforms
 
 Though `platerecipy` is fundamentally a `Python` package, it also relies on 
-backend functionalities that are implemented in `C`. Typically, Windows compared 
-to Linux requires a slightly different compilation and linking which at this 
-stage is not supported. That is why, currently, Linux is the only supported platform.
+backend functionalities that are implemented in `C`. **Linux** is the main operating 
+system for `platerecipy`. However, expect for a number of optimizations (e.g., multithreaded `C` functions), 
+`platerecipy` is now available via `pip` on Windows systems.
 
 ## Installation
 

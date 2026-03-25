@@ -1,6 +1,7 @@
 from setuptools import setup, Extension, find_packages
-import sys
-import sysconfig
+import os           # for PyPI long description 
+import sys          # for platform
+import sysconfig    # for extension
 
 shared_obj_ext  = sysconfig.get_config_var('EXT_SUFFIX')
 if shared_obj_ext is None:
@@ -56,6 +57,15 @@ libplaterecipy_legacyvtk_module = Extension(
     extra_link_args     = extra_link_args['legacyvtk'],
     extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_LEGACYVTK'],
 )
+
+with open(
+    os.path.join(
+        os.path.dirname(__file__), 
+        'README.md'
+    ), 
+    encoding='utf-8'
+    ) as readme_file:
+    long_description = readme_file.read()
 
 setup(
     name = 'platerecipy',
