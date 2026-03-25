@@ -22,10 +22,10 @@ module_path         = os.path.dirname(os.path.abspath(__file__))
 module_path         = os.path.abspath(os.path.join(module_path, os.pardir))
 shared_object_path  = os.path.join(
     module_path, 
-    "platerecipy_clib_segmentation" + sysconfig.get_config_var('EXT_SUFFIX')
+    "libplaterecipy_segmentation" + sysconfig.get_config_var('EXT_SUFFIX')
 )
 
-log.debug("Loading platerecipy_clib_segmentation.so")
+log.debug("Loading libplaterecipy_segmentation shared library")
 """
 A Python access to `clib/segmentation.h` module.
 """

@@ -12,7 +12,8 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdio.h>
-#if defined(_WIN32)
+
+#ifdef _WIN32
     #define CLIB_EXPORT __declspec(dllexport)
 #else
     #define CLIB_MULTITHREADED
@@ -20,12 +21,15 @@
     #include <pthread.h>
 #endif
 
+
 // Pi
 const double PI     = 3.14159265358979323846;
 // Pi / 2
 const double PI_2   = 1.57079632679489661923;
 // Pi / 4
 const double PI_4   = 0.78539816339744830962;
+// A big floating point number
+const double BIG    = 1e6;
 
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

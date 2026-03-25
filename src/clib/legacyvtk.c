@@ -6,6 +6,10 @@
 
 #include "legacyvtk.h"
 
+#ifdef _WIN32
+void PyInit_libplaterecipy_legacyvtk() {};
+#endif
+
 /**
  * (Internal)
  * Array mean calculator.

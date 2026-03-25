@@ -1,38 +1,60 @@
 from setuptools import setup, Extension, find_packages
 import sys
+import sysconfig
 
+shared_obj_ext  = sysconfig.get_config_var('EXT_SUFFIX')
+if shared_obj_ext is None:
+    shared_obj_ext = ".so"
+
+extra_link_args = {'transform': [], 'segmentation': [], 'legacyvtk': []}
 if sys.platform == 'win32':
-    extra_compile_args = ["/O2", '-DLIBCTOOLS']
+    # Windows compile arguments
+    extra_compile_args=['-D_GNU_SOURCE']
+elif sys.platform == 'darwin':
+    # MacOS compile arguments
+    config_vars     = sysconfig.get_config_vars()
+    config_vars['LDSHARED'] = config_vars['LDSHARED'].replace('-bundle', '-shared')
+    extra_link_args = {
+        'transform': ['-Wl,-install_name,@rpath/libplaterecipy_transform' + shared_obj_ext],
+        'segmentation': ['-Wl,-install_name,@rpath/libplaterecipy_segmentation' + shared_obj_ext],
+        'legacyvtk': ['-Wl,-install_name,@rpath/libplaterecipy_legacyvtk' + shared_obj_ext],
+    }
 else:
+    # Linux compile arguments
     extra_compile_args = [
-        '-O3','-std=c99', '-fPIC', '-DLIBCTOOLS'
+        '-std=c99',
+        '-Wno-unknown-pragmas', 
+        '-D_GNU_SOURCE', 
+        '-fPIC', 
+        '-O3'
     ]
 
-platerecipy_clib_transform_module = Extension(
-    'platerecipy_clib_transform',
-    sources = [
-        'src/clib/transform.c'
-    ],
-    include_dirs = ['src/clib'],
-    extra_compile_args=extra_compile_args,
+
+libplaterecipy_transform_module = Extension(
+    'libplaterecipy_transform',
+    sources = ['src/clib/transform.c'],
+    include_dirs        = ['src/clib'],
+    define_macros       = [('LIBPLATERECIPY_TRANSFORM', None)],
+    extra_link_args     = extra_link_args['transform'],
+    extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_TRANSFORM'],
 )
 
-platerecipy_clib_segmentation_module = Extension(
-    'platerecipy_clib_segmentation',
-    sources = [
-        'src/clib/segmentation.c'
-    ],
-    include_dirs = ['src/clib'],
-    extra_compile_args=extra_compile_args,
+libplaterecipy_segmentation_module = Extension(
+    'libplaterecipy_segmentation',
+    sources = ['src/clib/segmentation.c'],
+    include_dirs        = ['src/clib'],
+    define_macros       = [('LIBPLATERECIPY_SEGMENTATION', None)],
+    extra_link_args     = extra_link_args['segmentation'],
+    extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_SEGMENTATION'],
 )
 
-platerecipy_clib_legacyvtk_module = Extension(
-    'platerecipy_clib_legacyvtk',
-    sources = [
-        'src/clib/legacyvtk.c'
-    ],
-    include_dirs = ['src/clib'],
-    extra_compile_args=extra_compile_args,
+libplaterecipy_legacyvtk_module = Extension(
+    'libplaterecipy_legacyvtk',
+    sources = ['src/clib/legacyvtk.c'],
+    include_dirs        = ['src/clib'],
+    define_macros       = [('LIBPLATERECIPY_LEGACYVTK', None)],
+    extra_link_args     = extra_link_args['legacyvtk'],
+    extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_LEGACYVTK'],
 )
 
 setup(
@@ -59,9 +81,9 @@ setup(
         'vtp': ['vtk', 'pyvista']
     },
     ext_modules = [
-        platerecipy_clib_transform_module,
-        platerecipy_clib_segmentation_module,
-        platerecipy_clib_legacyvtk_module
+        libplaterecipy_transform_module,
+        libplaterecipy_segmentation_module,
+        libplaterecipy_legacyvtk_module
     ],
     zip_safe = False
 )

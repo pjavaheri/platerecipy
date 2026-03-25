@@ -6,6 +6,10 @@
 
 #include "transform.h"
 
+#ifdef _WIN32
+void PyInit_libplaterecipy_transform() {};
+#endif
+
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //      single_plate_interior_distance_transform
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

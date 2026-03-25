@@ -10,11 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#if defined(_WIN32)
+#ifdef _WIN32
     #define CLIB_EXPORT __declspec(dllexport)
 #else
     #define CLIB_EXPORT
 #endif
+
 
 /**
  * Initializes an ASCII VTK file and sets up a mesh grid (points + faces).

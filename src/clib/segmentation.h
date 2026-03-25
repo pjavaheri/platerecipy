@@ -12,11 +12,13 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdio.h>
-#if defined(_WIN32)
+
+#ifdef _WIN32
     #define CLIB_EXPORT __declspec(dllexport)
 #else
     #define CLIB_EXPORT
 #endif
+
 
 // Pi
 const double PI     = 3.14159265358979323846;

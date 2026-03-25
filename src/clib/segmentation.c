@@ -6,6 +6,10 @@
 
 #include "segmentation.h"
 
+#ifdef _WIN32
+void PyInit_libplaterecipy_segmentation() {};
+#endif
+
 /**
  * (internal)
  * 

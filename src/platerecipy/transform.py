@@ -20,9 +20,10 @@ module_path         = os.path.dirname(os.path.abspath(__file__))
 module_path         = os.path.abspath(os.path.join(module_path, os.pardir))
 shared_object_path  = os.path.join(
     module_path, 
-    "platerecipy_clib_transform" + sysconfig.get_config_var('EXT_SUFFIX')
+    "libplaterecipy_transform" + sysconfig.get_config_var('EXT_SUFFIX')
 )
 
+log.debug("Loading libplaterecipy_transform shared library")
 """
 A Python access to `clib/transform.h` module.
 """

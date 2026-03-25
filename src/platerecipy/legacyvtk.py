@@ -20,10 +20,10 @@ module_path         = os.path.dirname(os.path.abspath(__file__))
 module_path         = os.path.abspath(os.path.join(module_path, os.pardir))
 shared_object_path  = os.path.join(
     module_path, 
-    "platerecipy_clib_legacyvtk" + sysconfig.get_config_var('EXT_SUFFIX')
+    "libplaterecipy_legacyvtk" + sysconfig.get_config_var('EXT_SUFFIX')
 )
 
-log.debug("Loading platerecipy_clib_legacyvtk.so")
+log.debug("Loading libplaterecipy_legacyvtk shared library")
 """
 A Python access to `clib/legacyvtk.h` module.
 """
