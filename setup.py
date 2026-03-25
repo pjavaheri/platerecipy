@@ -68,18 +68,15 @@ with open(
     long_description = readme_file.read()
 
 setup(
-    name = 'platerecipy',
-    version = '2.0.0',
-    description = 'PLATE RECognition In PYthon',
-    long_description = 
-        'platerecipy is a tool for detecting candidate plates on global geophysical ' 
-        'datasets. It analyzes the surface to identify diffuse and non-conforming regions, '
-        'as well as regions with low confidence in plate assignment.',
-    long_description_content_type = 'text/markdown',
-    url = 'https://github.com/pjavaheri/platerecipy',
-    author = 'Pejvak Javaheri',
-    author_email = 'pejvak.javaheri@mail.utoronto.ca',
-    license = 'MIT',
+    name                            = 'platerecipy',
+    version                         = '2.0.0',
+    description                     = 'PLATE RECognition In PYthon',
+    long_description                = long_description,
+    long_description_content_type   = 'text/markdown',
+    url                             = 'https://github.com/pjavaheri/platerecipy',
+    author                          = 'Pejvak Javaheri',
+    author_email                    = 'pejvak.javaheri@mail.utoronto.ca',
+    license                         = 'MIT',
     packages = find_packages(where='src', include=['platerecipy']),
     package_dir = {'' : 'src'},
     install_requires = [
