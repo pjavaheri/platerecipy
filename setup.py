@@ -20,6 +20,13 @@ elif sys.platform == 'darwin':
         'segmentation': ['-Wl,-install_name,@rpath/libplaterecipy_segmentation' + shared_obj_ext],
         'legacyvtk': ['-Wl,-install_name,@rpath/libplaterecipy_legacyvtk' + shared_obj_ext],
     }
+    extra_compile_args = [
+        '-std=c99',
+        '-Wno-unknown-pragmas', 
+        '-D_GNU_SOURCE', 
+        '-fPIC', 
+        '-O3'
+    ]
 else:
     # Linux compile arguments
     extra_compile_args = [
