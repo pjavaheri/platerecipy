@@ -2,6 +2,10 @@
 
 # Basic Usage
 
+!!! tip "Help function"
+    It is recommended to access the most up-to-date information by either calling
+    `help(example_function)` or running `?example_function` on a `jupyter` notebook.
+
 As a demonstration, assuming a given `input_xs`, `input_ys`, `input_zs`, and  
 `input_field` (all `numpy` arrays), using `platerecipy` is as simple as follows:
 
