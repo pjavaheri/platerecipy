@@ -46,15 +46,15 @@ io.save_as_vtk(m)
 # Additional examples
 
 <div class="example-grid">
-  <a href="/user_guide/detailed_example">
+  <a href="../detailed_example/">
     <img src="../../media/field_plots_2.png">
     <h3>Detailed example using spherical harmonics</h3>
   </a>
-   <a href="/user_guide/detailed_example/#low-confidence-and-non-conforming-regions">
+   <a href="../detailed_example/#low-confidence-and-non-conforming-regions">
     <img src="../../media/lowconf-example.png">
     <h3>Low-confidence regions</h3>
   </a>
-   <a href="/user_guide/detailed_example/#mapping-to-original-ungridded-input-data-points">
+   <a href="../detailed_example/#mapping-to-original-ungridded-input-data-points">
     <img src="../../media/original_mapping.png">
     <h3>Mapping to original data points</h3>
   </a>
