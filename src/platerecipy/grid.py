@@ -9,7 +9,6 @@ log = logging.getLogger(__name__)
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-from pandas import DataFrame
 
 from . import _FLOAT
 
@@ -415,6 +414,11 @@ class PartialSphericalGrid(Grid):
 
             grid_linear = grid_linear.reshape(self.xs.shape)
         
+        else:
+            raise ValueError("Interpolation method is not recognized.")
+
+
+
         # forcing boundary conditions by averaging
         if np.abs(self.theta_range[0]) < 1e-8:
             grid_linear[ 0,  :] = np.mean(grid_linear[:,  0])
@@ -437,10 +441,11 @@ class PartialSphericalGrid(Grid):
     def map_to_original_input(
         self,
         field       : np.ndarray,
-        method      = 'nearest',
+        #method      = 'nearest',
         take_log    = False,
-        csv_output  = None
-    ):
+        method          = "lat-lon", #"lat-lon" or "tangent-plane",
+        **method_kwargs
+    ) -> np.ndarray:
         """
         Maps the spherical field back to the original input format by interpolating 
         the nodes using the nearest method.
@@ -458,46 +463,137 @@ class PartialSphericalGrid(Grid):
             fields that vary by orders of magnitude), and makes a substantive
             difference if `method == 'linear'`, default = False.
         
-        csv_output : str, optional,
-            whether to save the data in a CSV file with name csv_output
-        
         Returns
         -------
         np.ndarray
         """
+        log.debug('Interpolating fields back to the original input array')
+
         # checking if interpolation needs to occur on the log space
         if take_log:
             field = np.log(field)
 
-        org_nearest = griddata(
-            (self.thetas.ravel(), self.phis.ravel()),
-            field.ravel(),  
-            self.original_points_in_theta_phi, 
-            method='nearest'
-        )
+        if method == "lat-lon":
+            log.debug('... lat-lon linear interpolation')
 
-        if method == 'linear':
-            org_linear = griddata(
+            # by default the nearest method is used for the points
+            # outside the convex hull and an integer field (e.g., plate ID)
+            org_nearest = griddata(
                 (self.thetas.ravel(), self.phis.ravel()),
                 field.ravel(),  
                 self.original_points_in_theta_phi, 
-                method='linear'
+                method='nearest'
             )
-            org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
-            org_order = org_linear
+
+            if field.dtype == _FLOAT:
+                # a float field will be interpolated linearly within
+                # the convex hull
+                org_linear = griddata(
+                    (self.thetas.ravel(), self.phis.ravel()),
+                    field.ravel(),  
+                    self.original_points_in_theta_phi, 
+                    method='linear'
+                )
+                org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
+                org_order = org_linear
+            else:
+                org_order = org_nearest
+        
+        elif method == "tangent-plane":
+            log.debug('... tangent linear interpolation using an LSQ fit to the closest neighbors')
+
+            # loading defaults
+            if not 'k' in method_kwargs.keys():
+                method_kwargs['k'] = 4
+            
+            if not 'eps' in method_kwargs.keys():
+                method_kwargs['eps'] = 1e-6
+            
+            if not 'near_thresh' in method_kwargs.keys():
+                method_kwargs['near_thresh'] = 1e-6
+
+            if not hasattr(self, '_original_cart_mat'):
+                self._original_cart_mat = np.vstack([
+                    self.original_xs.ravel(), 
+                    self.original_ys.ravel(), 
+                    self.original_zs.ravel(),
+                ]).T
+            
+            if not hasattr(self, '_cart_mat'):
+                self._cart_mat = np.vstack([
+                    self.xs.ravel(), 
+                    self.ys.ravel(), 
+                    self.zs.ravel(),
+                ]).T
+            
+            # constructing a similarity tree
+            if not hasattr(self, '_kdtree'):
+                log.debug('... constructing a similarity tree')
+                self._kdtree = cKDTree(self._cart_mat)
+            
+            if (not hasattr(self, '_neigh_dists')) or (not hasattr(self, '_neighs')):
+                log.debug('... querying the tree for near neighbors')
+                self._neigh_dists, self._neighs = \
+                    self._kdtree.query(self._original_cart_mat, k=method_kwargs['k'])
+            
+            neighs     = self._cart_mat[self._neighs]
+            neigh_vals = field[self._neighs] 
+
+            if field.dtype == _FLOAT:
+                # unit vectors on the surface
+                #r_hats = self._original_cart_mat / self.r
+                theta_hats = np.vstack([
+                    np.cos(self.original_thetas.ravel())*np.cos(self.original_phis.ravel()),
+                    np.cos(self.original_thetas.ravel())*np.sin(self.original_phis.ravel()),
+                    -np.sin(self.original_thetas.ravel())
+                ]).T
+                phi_hats = np.vstack([
+                    -np.sin(self.original_phis.ravel()),
+                    np.cos(self.original_phis.ravel()),
+                    np.zeros_like(self.original_thetas.ravel())
+                ]).T
+
+                # constructing a linear model on the tangent space
+                log.debug('... constructing a linear LSQ model on the tangent space')
+                ps = np.array([
+                    neighs[:, i, :] - self._original_cart_mat[:, :] \
+                        for i in range(method_kwargs['k'])
+                ])
+                fs = [neigh_vals[:, i] for i in range(method_kwargs['k'])]
+                xs = np.array([np.vecdot(ps[i], theta_hats, axis=1) for i in range(method_kwargs['k'])])
+                ys = np.array([np.vecdot(ps[i], phi_hats, axis=1) for i in range(method_kwargs['k'])])
+                G = np.array([
+                    [np.ones_like(xs[i]), xs[i], ys[i]] for i in range(method_kwargs['k'])
+                ])
+                G = np.transpose(G, [2, 0, 1])
+                GT = np.transpose(G, [0, 2, 1])
+                GTG = GT@G
+                trace_GTG = np.trace(GTG, axis1=1, axis2=2)
+                GTG[:, 0, 0] += method_kwargs['eps']*trace_GTG
+                GTG[:, 1, 1] += method_kwargs['eps']*trace_GTG
+                GTG[:, 2, 2] += method_kwargs['eps']*trace_GTG
+                B = np.vstack([fs[i] for i in range(method_kwargs['k'])])
+                B = np.transpose(B, [1, 0])
+                B = B.reshape((B.shape[0], B.shape[1], 1))
+
+                log.debug('... solving all linear LSQ problems together (stacked)')
+                org_order = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel() # this may fail
+
+                # if a point is too close to a gride point, simply use its value
+                org_order[
+                    self._neigh_dists[:, 0]/self.r < method_kwargs['near_thresh']
+                ] = fs[0][
+                    self._neigh_dists[:, 0]/self.r < method_kwargs['near_thresh']
+                ]
+            else:
+                org_order = neigh_vals[:, 0]
+
         else:
-            org_order = org_nearest
+            raise ValueError("Interpolation method is not recognized.")
+
 
         if take_log:
             org_order = np.exp(org_order)
-        
-        if csv_output is not None:
-            data = {
-                'theta' : self.original_points_in_theta_phi[:, 0],
-                'phi'   : self.original_points_in_theta_phi[:, 1],
-                'value' : org_order 
-            }
-            DataFrame(data).to_csv(csv_output)
 
         return org_order
 

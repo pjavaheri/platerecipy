@@ -24,7 +24,7 @@ field = grid.interpolate_field(input_field)
 m = PlateModel(grid)
 
 # stacking the interpolated field
-m.stack_field(field, take_log=True)
+m.stack_field(field)
 
 # finding plates on the stacked field
 m.find_plates(
@@ -34,9 +34,9 @@ m.find_plates(
     min_marker_size       = 100             # to filter out micro plates
 )
 
-# outputting as a ParaView readable .vtp file
+# outputting as a ParaView readable .vtk file
 from platerecipy import io
-io.save_as_vtp(m)
+io.save_as_vtk(m)
 ```
 
 

@@ -289,7 +289,6 @@ def save_mollweide_projection(
         'font.family'       : 'STIXGeneral', 
         'font.size'         : 16
     }):
-
         fig, axes = plt.subplots(
             3, 1, figsize=(10, 12), subplot_kw={'projection': 'mollweide'}
         )
@@ -307,17 +306,28 @@ def save_mollweide_projection(
 
         # ~~~~~~~~ for the plate IDs ~~~~~~~~~
         ax = axes[1]
-        bounds = np.linspace(model.plate_IDs.min()-0.5, model.plate_IDs.max()+0.5, model.plate_IDs.max()+1)
+        bounds = np.linspace(0.5, model.plate_IDs.max()+0.5, model.plate_IDs.max()+1)
         norm = mpl.colors.BoundaryNorm(boundaries=bounds, ncolors=256)
         pc = ax.pcolormesh(
             model.grid.phis, np.pi/2 - model.grid.thetas, model.plate_IDs, shading='nearest',
-            cmap="nipy_spectral", norm=norm
+            cmap='jet', norm=norm
         )
+
+        if model.plate_IDs.min() == 0:
+            # non-conforming regions were identified
+            # they will be plotted in black shade
+            temp = model.plate_IDs.copy().astype(float)
+            temp[model.plate_IDs > 0] = float('NaN')
+            ax.pcolormesh(
+                model.grid.phis, np.pi/2 - model.grid.thetas, temp, shading='nearest',
+                cmap='Grays', vmin=-1, vmax=0
+            )
+        
         cb = fig.colorbar(pc, ax=ax, orientation="vertical", shrink=0.5)
         cb.set_label("Plate ID")
         cb.ax.set_yticks(
-            [model.plate_IDs.min(), model.plate_IDs.max()], 
-            [model.plate_IDs.min(), model.plate_IDs.max()]
+            [1, model.plate_IDs.max()], 
+            [1, model.plate_IDs.max()]
         )
         ax.set_yticks([-np.pi*5/12, -np.pi/3, -np.pi/4, -np.pi/6, -np.pi/12, 0, np.pi/12, np.pi/6, np.pi/4, np.pi/3, np.pi*5/12])
         ax.set_xticks([-np.pi*5/6,-np.pi/2, -np.pi/4, 0, np.pi/4, np.pi/2, np.pi*5/6])
@@ -337,7 +347,6 @@ def save_mollweide_projection(
         fig.tight_layout()
         fig.savefig(filename, dpi=300)
         plt.close()
-
 
 
 def save_six_view_angles(

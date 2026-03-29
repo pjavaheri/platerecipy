@@ -20,7 +20,7 @@ nav:
   - Installation: install.md
   - User Guide: 
     - Basic Usage: user_guide/basic_usage.md
-    - Example 1: user_guide/examples.md
+    - Detailed Example: user_guide/detailed_example.md
   - How to cite: cite.md
 extra:
   version:
