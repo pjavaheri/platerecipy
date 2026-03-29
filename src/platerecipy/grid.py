@@ -10,7 +10,7 @@ import numpy as np
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 
-from . import _FLOAT
+from . import _FLOAT, _INT
 
 def convert_grid_to_mesh(
     gridded_fields  : list,
@@ -469,6 +469,8 @@ class PartialSphericalGrid(Grid):
         """
         log.debug('Interpolating fields back to the original input array')
 
+        field = field.ravel()
+
         # checking if interpolation needs to occur on the log space
         if take_log:
             field = np.log(field)
@@ -485,7 +487,9 @@ class PartialSphericalGrid(Grid):
                 method='nearest'
             )
 
-            if field.dtype == _FLOAT:
+            if field.dtype == _INT:
+                org_order = org_nearest.astype(_INT)
+            else:
                 # a float field will be interpolated linearly within
                 # the convex hull
                 org_linear = griddata(
@@ -496,8 +500,7 @@ class PartialSphericalGrid(Grid):
                 )
                 org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
                 org_order = org_linear
-            else:
-                org_order = org_nearest
+                
         
         elif method == "tangent-plane":
             log.debug('... tangent linear interpolation using an LSQ fit to the closest neighbors')
@@ -539,7 +542,9 @@ class PartialSphericalGrid(Grid):
             neighs     = self._cart_mat[self._neighs]
             neigh_vals = field[self._neighs] 
 
-            if field.dtype == _FLOAT:
+            if field.dtype == _INT:
+                org_order = neigh_vals[:, 0]
+            else:
                 # unit vectors on the surface
                 #r_hats = self._original_cart_mat / self.r
                 theta_hats = np.vstack([
@@ -585,8 +590,7 @@ class PartialSphericalGrid(Grid):
                 ] = fs[0][
                     self._neigh_dists[:, 0]/self.r < method_kwargs['near_thresh']
                 ]
-            else:
-                org_order = neigh_vals[:, 0]
+                
 
         else:
             raise ValueError("Interpolation method is not recognized.")

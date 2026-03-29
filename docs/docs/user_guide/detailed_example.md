@@ -301,6 +301,22 @@ plt.pcolormesh(grid.phis, np.pi/2-grid.thetas, temp, cmap='Grays', vmin=-1, vmax
 ```
 ![lowconf-example](../media/lowconf-example.png)
 
+## Mapping to original ungridded input data points
+We can map any field of our choice back to the input by calling:
+
+```python
+org_IDs = grid.map_to_original_input(model.plate_IDs)
+```
+
+and plotting the data points:
+
+```python
+plt.scatter(grid.original_phis, np.pi/2 - grid.original_thetas, c=org_IDs, marker='.', s=0.1)
+```
+
+![original_order](../media/original_mapping.png)
+
+
 
 
 

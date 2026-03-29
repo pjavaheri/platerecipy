@@ -4,3 +4,18 @@ body {
     background-size: cover;      /* Optional: covers the entire background */
     background-attachment: fixed; /* Optional: fixes image in place when scrolling */
 }
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+.example-grid img {
+  width: 100%;
+  border-radius: 8px;
+}
+.example-grid a {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;  /* vertical centering */
+  align-items: center;      /* horizontal centering */
+}   
