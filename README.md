@@ -14,10 +14,10 @@ system for `platerecipy`. However, expect for a number of optimizations (e.g., m
 
 ## Installation
 
-Releases are made available on PyPI so that `platerecipy` can be installed using 
+Version releases are made available on PyPI so that `platerecipy` can be installed using 
 `pip` on the shell as follows:
 ```bash
-python -m pip install platerecipy
+pip install platerecipy
 ```
 
 ## User guide
