@@ -1,7 +1,16 @@
 """
-@file model.py
-@author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for model object and functions.
+File brief
+----------
+`model.py`
+
+Module for model object and functions.
+
+This is a part of `platerecipy` package. For license and citation, please
+refer to the main repository:
+[github.com/pjavaheri/platerecipy](github.com/pjavaheri/platerecipy)
+
+Author(s): 
+Pejvak Javaheri; [pejvak.javaheri@mail.utoronto.ca](mailto:pejvak.javaheri@mail.utoronto.ca)
 """
 
 import logging

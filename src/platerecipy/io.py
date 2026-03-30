@@ -1,8 +1,18 @@
 """
-@file io.py
-@author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for input/output functions.
+File brief
+----------
+`io.py`
+
+Module for input/output functions.
+
+This is a part of `platerecipy` package. For license and citation, please
+refer to the main repository:
+[github.com/pjavaheri/platerecipy](github.com/pjavaheri/platerecipy)
+
+Author(s): 
+Pejvak Javaheri; [pejvak.javaheri@mail.utoronto.ca](mailto:pejvak.javaheri@mail.utoronto.ca)
 """
+
 
 import logging
 log = logging.getLogger(__name__)
@@ -17,6 +27,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 
+from typing import Union, List, Tuple
 
 def save_as_mat(
     model               : PlateModel,
@@ -128,6 +139,7 @@ def save_as_csv(
     model               : PlateModel,
     other_fields        = None,
     other_fields_names  = None,
+    map_to_original     = False,
     filename            = 'platerecipy_output.csv'
 ):
     """
@@ -143,47 +155,40 @@ def save_as_csv(
 
     other_fields_names : list, optional,
         A list of field identifiers corresponding to `other_fields`.
+
+    map_to_original : bool, default=False
+        Whether to map the fields back to the original input data points.
     
     filename : str, default='platerecipy_output.csv'
         Output filename.
     """
+    fields_to_write = [model.plate_IDs, model.stacked_field, model.ID_probs]
+    fields_names_to_write = ['plate_IDs', 'ID_probs', 'stacked_field']
 
     if other_fields is not None:
-        other_fields.append(model.plate_IDs)
-        other_fields.append(model.ID_probs)
-        other_fields.append(model.stacked_field)
-        other_fields.append(model.grid.xs)
-        other_fields.append(model.grid.ys)
-        other_fields.append(model.grid.zs)
+        for i in range(len(other_fields)):
+            fields_to_write.append(other_fields[i])
+            fields_names_to_write.append(other_fields_names[i])
 
-        other_fields_names.append('plate_IDs')
-        other_fields_names.append('ID_probs')
-        other_fields_names.append('stacked_field')
-        other_fields_names.append('xs')
-        other_fields_names.append('ys')
-        other_fields_names.append('zs')
+    if map_to_original:
+        fields_to_write = [
+            model.grid.map_to_original_input(f.ravel(), method='tangent-plane') \
+                for f in fields_to_write
+        ]
+        fields_to_write.append(model.grid.original_xs)
+        fields_to_write.append(model.grid.original_ys)
+        fields_to_write.append(model.grid.original_zs)
+        fields_names_to_write += ["original_xs", "original_ys", "original_zs"]
     else:
-        other_fields = [
-            model.plate_IDs.ravel(), 
-            model.ID_probs.ravel(), 
-            model.stacked_field.ravel(),
-            model.grid.xs.ravel(),
-            model.grid.ys.ravel(),
-            model.grid.zs.ravel()
-        ]
-        
-        other_fields_names = [
-            'plate_IDs', 
-            'ID_probs', 
-            'stacked_field', 
-            'xs', 
-            'ys', 
-            'zs'
-        ]
+        fields_to_write = [f.ravel() for f in fields_to_write]
+        fields_to_write.append(model.grid.xs.ravel())
+        fields_to_write.append(model.grid.ys.ravel())
+        fields_to_write.append(model.grid.zs.ravel())
+        fields_names_to_write += ["xs", "ys", "zs"]
     
     fmtstr = ""
-    for i in range(len(other_fields)):
-        if other_fields[i].dtype == _INT:
+    for i in range(len(fields_to_write)):
+        if fields_to_write[i].dtype == _INT:
             fmtstr += "{" + str(i) + ":d},"
         else:
             fmtstr += "{" + str(i) + ":.7e},"
@@ -191,14 +196,14 @@ def save_as_csv(
 
     with open(filename, 'w') as outfile:
         header = ""
-        for var in other_fields_names:
+        for var in fields_names_to_write:
             header += f"{var},"
         header = header[:-1] + '\n'
         outfile.write(header)
-        for i in range(model.grid.xs.size-1):
+        for i in range(fields_to_write[0].size):
             outfile.write(
                 fmtstr.format(
-                    *tuple(arr[i] for arr in other_fields)
+                    *tuple(arr[i] for arr in fields_to_write)
                 )
             )
 

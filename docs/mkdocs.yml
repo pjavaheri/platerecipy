@@ -15,6 +15,17 @@ theme:
   features:
     - navigation.tabs
     #- toc.integrate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ['../src']
+          options:
+            docstring_style: numpy
+            show_source: false
+
 nav:
   - Home: index.md
   - Installation: install.md
@@ -22,9 +33,15 @@ nav:
     - Basic Usage: user_guide/basic_usage.md
     - Detailed Example: user_guide/detailed_example.md
   - How to cite: cite.md
+  - API:
+    - grid: api/grid.md
+    - model: api/model.md
+    - io: api/io.md
+
 extra:
   version:
     provider: readthedocs
+
 markdown_extensions:
   - pymdownx.superfences
   - pymdownx.highlight:
@@ -34,5 +51,6 @@ markdown_extensions:
   # additional functionality like collapsible admonitions and nesting:
   - pymdownx.details
   - pymdownx.superfences
+
 extra_css:
   - extra.css

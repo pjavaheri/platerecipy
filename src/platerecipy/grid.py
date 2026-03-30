@@ -1,8 +1,18 @@
 """
-@file output.py
-@author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for grid input, output and visualizations.
+File brief
+----------
+`grid.py`
+
+Module for grid input, output and visualizations.
+
+This is a part of `platerecipy` package. For license and citation, please
+refer to the main repository:
+[github.com/pjavaheri/platerecipy](github.com/pjavaheri/platerecipy)
+
+Author(s): 
+Pejvak Javaheri; [pejvak.javaheri@mail.utoronto.ca](mailto:pejvak.javaheri@mail.utoronto.ca)
 """
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -12,20 +22,28 @@ from scipy.spatial import cKDTree
 
 from . import _FLOAT, _INT
 
+from typing import Union, List, Tuple
+
 def convert_grid_to_mesh(
-    gridded_fields  : list,
-    field_names     : list,
+    gridded_fields  : List[np.ndarray],
+    field_names     : List[str],
     radius          = 1.
-):
+) -> object:
     """
+    (Internal)
+
     Stores all gridded fields onto a spherical mesh (with nodal connectivity).
     
     Parameters
     ----------
-    gridded_fields  : list,
-    field_names     : list,
-    theta_phi_axes  = None,
-    radius          = 1.
+    gridded_fields  : List[np.ndarray],
+        A list of field data in array form.
+
+    field_names     : List[str],
+        A list of field names.
+    
+    radius : float, default=1.
+        Radius of the sphere.
 
     Returns
     -------
@@ -36,6 +54,10 @@ def convert_grid_to_mesh(
     Gridded fields are assumed to be C-like (row-major) arrays with the first 
     dimension corresponding to theta (the polar angle) and the second to phi 
     (the azimuthal angle).
+
+    Warning
+    -------
+    This function requires `vtk` and `pyvista` packages.
 
     """
     log.debug("Converting the grid to a pyvsita mesh ...")
@@ -160,19 +182,19 @@ class PartialSphericalGrid(Grid):
 
         Parameters
         ----------
-        original_xs : np.ndarray,
+        original_xs : np.ndarray
             array of original input Cartesian x coordinates.
 
-        original_ys : np.ndarray,
+        original_ys : np.ndarray
             array of original input Cartesian y coordinates.
 
-        original_zs : np.ndarray,
+        original_zs : np.ndarray
             array of original input Cartesian z coordinates.
         
-        theta_range : tuple,
+        theta_range : tuple
             the polar (colatitude) range.
         
-        phi_range : tuple,
+        phi_range : tuple
             the azimuthal (longitude) range.
         
         theta_res : int, optional
@@ -280,17 +302,28 @@ class PartialSphericalGrid(Grid):
         **method_kwargs
     ) -> np.ndarray:
         """
-        Interpolates the input field linearly for convex hull interior points and
-        closest points to the exterior.
+        Interpolates the input field to the grid objects nodes.
 
         Parameters
         ----------
-        field : np.ndarray,
+        field : np.ndarray
             array corresponding to the original Cartesian coordinate inputs.
         
         take_log : bool, False
             whether to perform the interpolation on the log space (suitable for
             fields that vary by orders of magnitude), default = False.
+        
+        method : str, default = "lat-lon"
+            Whether to interpolate on the lat-lon space or to interpolate the 
+            data points linearly on the tangent plane. Options: "lat-lon" or "tangent-plane"
+        
+        method_kwargs : dict, optional
+            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
+            and `near_thresh`.
+        
+        Note
+        ----
+        `method = "tangent-plane"` is recommended for speed and accuracy.
         
         Returns
         -------
@@ -441,9 +474,8 @@ class PartialSphericalGrid(Grid):
     def map_to_original_input(
         self,
         field       : np.ndarray,
-        #method      = 'nearest',
         take_log    = False,
-        method          = "lat-lon", #"lat-lon" or "tangent-plane",
+        method      = "lat-lon", #"lat-lon" or "tangent-plane",
         **method_kwargs
     ) -> np.ndarray:
         """
@@ -454,14 +486,23 @@ class PartialSphericalGrid(Grid):
         ----------
         field : np.ndarray,
             array corresponding to the original Cartesian coordinate inputs.
-        
-        method : str, optional,
-            'nearest' or 'linear', default = 'nearest'
 
         take_log : bool, False,
             whether to perform the interpolation on the log space (suitable for
             fields that vary by orders of magnitude), and makes a substantive
             difference if `method == 'linear'`, default = False.
+        
+        method : str, default = "lat-lon"
+            Whether to interpolate on the lat-lon space or to interpolate the 
+            data points linearly on the tangent plane. Options: "lat-lon" or "tangent-plane"
+        
+        method_kwargs : dict, optional
+            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
+            and `near_thresh`.
+        
+        Note
+        ----
+        `method = "tangent-plane"` is recommended for speed and accuracy.
         
         Returns
         -------
