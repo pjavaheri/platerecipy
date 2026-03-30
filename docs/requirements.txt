@@ -1,2 +1,6 @@
+numpy
+scipy
+matplotlib
 mkdocs
 mkdocs-material
+mkdocstrings[python]
