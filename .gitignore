@@ -1,4 +1,4 @@
-src/platerecipy/analysis
+src/platerecipy/analysis.py
 dist/
 build/
 *.pyc
