@@ -1,7 +1,7 @@
 """
 @file transform.py
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for transformation functions.
+@brief Internal module for transformation functions.
 """
 
 import logging

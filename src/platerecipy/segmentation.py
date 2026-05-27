@@ -1,7 +1,7 @@
 """
 @file segmentation.py
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for segmentation functions.
+@brief Internal module for segmentation functions.
 """
 
 import logging

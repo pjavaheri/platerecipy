@@ -55,7 +55,7 @@ int make_rectangular_vtk_grid(
 
     fprintf(
         fptr,
-        "# vtk DataFile Version 3.0\nTwo triangles\nASCII\nDATASET POLYDATA\n\n"
+        "# vtk DataFile Version 3.0\nPlateRecipy\nASCII\nDATASET POLYDATA\n\n"
     );
     fprintf(
         fptr, 
@@ -203,7 +203,7 @@ int make_spherical_vtk_grid(
 
     fprintf(
         fptr,
-        "# vtk DataFile Version 3.0\nTwo triangles\nASCII\nDATASET POLYDATA\n\n"
+        "# vtk DataFile Version 3.0\nPlateRecipy\nASCII\nDATASET POLYDATA\n\n"
     );
     fprintf(
         fptr, 

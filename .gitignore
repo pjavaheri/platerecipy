@@ -1,0 +1,5 @@
+src/platerecipy/analysis
+dist/
+build/
+*.pyc
+.vscode/

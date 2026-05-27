@@ -1,7 +1,7 @@
 """
 @file legacyvtk.py
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
-@brief Module for legacy VTK output functions.
+@brief Internal module for legacy VTK output functions.
 """
 
 import logging
