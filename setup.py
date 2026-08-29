@@ -7,18 +7,20 @@ shared_obj_ext  = sysconfig.get_config_var('EXT_SUFFIX')
 if shared_obj_ext is None:
     shared_obj_ext = ".so"
 
-extra_link_args = {'transform': [], 'segmentation': [], 'legacyvtk': []}
+extra_link_args = {'grid': [], 'transform': [], 'segmentation': []}
 if sys.platform == 'win32':
     # Windows compile arguments
     extra_compile_args=['-D_GNU_SOURCE']
+    extra_link_args['transform'] += ['-fopenmp']
+    
 elif sys.platform == 'darwin':
     # MacOS compile arguments
     config_vars     = sysconfig.get_config_vars()
     config_vars['LDSHARED'] = config_vars['LDSHARED'].replace('-bundle', '-shared')
     extra_link_args = {
+        'grid': ['-Wl,-install_name,@rpath/libplaterecipy_grid' + shared_obj_ext],
         'transform': ['-Wl,-install_name,@rpath/libplaterecipy_transform' + shared_obj_ext],
-        'segmentation': ['-Wl,-install_name,@rpath/libplaterecipy_segmentation' + shared_obj_ext],
-        'legacyvtk': ['-Wl,-install_name,@rpath/libplaterecipy_legacyvtk' + shared_obj_ext],
+        'segmentation': ['-Wl,-install_name,@rpath/libplaterecipy_segmentation' + shared_obj_ext]
     }
     extra_compile_args = [
         '-std=c99',
@@ -34,9 +36,19 @@ else:
         '-Wno-unknown-pragmas', 
         '-D_GNU_SOURCE', 
         '-fPIC', 
-        '-O3'
+        '-O3',
+        '-fopenmp'
     ]
+    extra_link_args['transform'] += ['-fopenmp']
 
+libplaterecipy_grid_module = Extension(
+    'libplaterecipy_grid',
+    sources = ['src/clib/grid.c'],
+    include_dirs        = ['src/clib'],
+    define_macros       = [('LIBPLATERECIPY_GRID', None)],
+    extra_link_args     = extra_link_args['grid'],
+    extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_GRID'],
+)
 
 libplaterecipy_transform_module = Extension(
     'libplaterecipy_transform',
@@ -54,15 +66,6 @@ libplaterecipy_segmentation_module = Extension(
     define_macros       = [('LIBPLATERECIPY_SEGMENTATION', None)],
     extra_link_args     = extra_link_args['segmentation'],
     extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_SEGMENTATION'],
-)
-
-libplaterecipy_legacyvtk_module = Extension(
-    'libplaterecipy_legacyvtk',
-    sources = ['src/clib/legacyvtk.c'],
-    include_dirs        = ['src/clib'],
-    define_macros       = [('LIBPLATERECIPY_LEGACYVTK', None)],
-    extra_link_args     = extra_link_args['legacyvtk'],
-    extra_compile_args  = extra_compile_args + ['-DLIBPLATERECIPY_LEGACYVTK'],
 )
 
 with open(
@@ -89,15 +92,16 @@ setup(
     install_requires = [
         'numpy', 
         'scipy',
-        'matplotlib'
+        'matplotlib',
+        'pyvista'
     ],
-    extras_require={
-        'vtp': ['vtk', 'pyvista']
-    },
+    #extras_require={
+    #    'vtp': ['vtk', 'pyvista']
+    #},
     ext_modules = [
+        libplaterecipy_grid_module,
         libplaterecipy_transform_module,
-        libplaterecipy_segmentation_module,
-        libplaterecipy_legacyvtk_module
+        libplaterecipy_segmentation_module
     ],
     zip_safe = False
 )

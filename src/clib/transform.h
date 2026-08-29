@@ -13,13 +13,31 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include "grid.h"
+
 #ifdef _WIN32
     #define CLIB_EXPORT __declspec(dllexport)
 #else
-    #define CLIB_MULTITHREADED
     #define CLIB_EXPORT
-    #include <pthread.h>
 #endif
+
+#ifdef _OPENMP
+    #include <omp.h>
+#else
+    #if defined(__APPLE__) && defined(__MACH__)
+        #include <pthread.h>
+    #endif
+#endif
+
+
+// ~~~~~ Callback mechanism for the Python logger ~~~~~
+
+typedef void (*transform_h_log_func)(const char *);
+static transform_h_log_func transform_h_logger = NULL;
+CLIB_EXPORT void set_transform_h_logger(transform_h_log_func func);
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 
 // Pi
@@ -32,340 +50,52 @@ const double PI_4   = 0.78539816339744830962;
 const double BIG    = 1e6;
 
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//      single_plate_interior_distance_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the spherical distance 
- * transform is to be applied on the interior of only a single plates, indicated 
- * by the initial -1 values for plate interior and -2 values for point not on 
- * the plate.
- */
-
 
 /**
- * Finds the spherical (geodesic) distance transform for a single plate. 
- * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
- * plate of interest) and `-2` (all other regions).
+ * Labels True connected patches by positive integer values 
+ * (starting from 1) and leaves False intervening bands as False.
  * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param num_points length of the array (total number of points)
- * @param R the radius of the sphere
- * @param arr_out for the output distances
- * 
- * @returns 0 if no error
- * 
- * @warning `arr_out` must be initialized with `-1` for the plate of interest 
- *          and `-2` for all other plates/regions.
+ * @param map a pointer to a Map struct
+ * @param markers a pointer to the boolean input array
+ * @param labels a pointer to an allocated array to store the output
+ *
+ * @warning labels will be overwritten.
  */
-CLIB_EXPORT int single_plate_interior_distance_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out
+CLIB_EXPORT void label_markers_from_map(
+    Map *       map,
+    bool *      markers,
+    int32_t *   labels
 );
 
-#ifdef CLIB_MULTITHREADED
+
 /**
- * Finds the spherical (geodesic) distance transform for a single plate. 
- * The plate interior is denoted by `arr_out` that is initialized by `-1` (the 
- * plate of interest) and `-2` (all other regions).
- * 
+ * Performs an inverted fused distance transform. This means,
+ * all True regions that are close enough (defined by threshold)
+ * to False regions will be turned to False in the output.
+ *
+ * @note R corresponds to the radius of the sphere, so that
+ * the threshold will be the great-circle distance in radians.
+ * Otherwise, R will effectively non-dimensionalize the distances.
+ *
+ * @param map a pointer to a Map struct
  * @param xs Cartesian x coordinates
  * @param ys Cartesian y coordinates
  * @param zs Cartesian z coordinates 
- * @param num_points length of the array (total number of points)
- * @param R the radius of the sphere
- * @param arr_out for the output distances
- * @param num_threads number of threads
- * 
- * @returns 0 if no error
- * 
- * @warning `arr_out` must be initialized with `-1` for the plate of interest 
- *          and `-2` for all other plates/regions.
- */
-CLIB_EXPORT int single_plate_interior_distance_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out,
-    int32_t     num_threads
-);
-#endif
-
-
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//       full_plate_interior_distance_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the spherical distance 
- * transform is to be applied on the interior of all plates, indicated in the
- * `plate_IDs` array.
- */
-
-
-/**
- * Finds the spherical (geodesic) distance transform for all plates. 
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param plate_IDs plate IDs
- * @param num_points length of the array (total number of points)
- * @param R the radius of the sphere
- * @param arr_out for the output distances
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int full_plate_interior_distance_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t *   plate_IDs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out
-);
-
-#ifdef CLIB_MULTITHREADED
-/**
- * Finds the spherical (geodesic) distance transform for all plates. 
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param plate_IDs plate IDs
- * @param num_points length of the array (total number of points)
- * @param R the radius of the sphere
- * @param arr_out for the output distances,
- * @param num_threads number of threads
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int full_plate_interior_distance_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t *   plate_IDs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out,
-    int32_t     num_threads
-);
-#endif
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on any array of booleans. In all, the original 
- * array `arr` must be different from the output `arr_out`.
- */
-
-
-/**
- * Performs a distance transform and applies a threshold transform such that 
- * the resulting array contains `true` for all points withing the distance 
- * of `threshold` measured from the great-circle distances on the sphere.
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param arr initial boolean array
- * @param i_max length of the array along the first dimension
- * @param j_max length of the array along the second dimension
+ * @param arr input boolean array
  * @param R the radius of the sphere
  * @param threshold distance threshold in radians
  * @param arr_out for the output transformed boolean array
- * 
- * @returns 0 if no error
  */
-CLIB_EXPORT int fused_distance_threshold_transform_64bit(
+CLIB_EXPORT void inverted_fused_distance_threshold_transform_on_map(
+    Map *       map,
     double *    xs,
     double *    ys,
     double *    zs,
     bool *      arr,
-    int32_t     num_points,
-    double      R,
-    double      threshold,
-    bool *      arr_out
-);
-
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     gridded_fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on a 2D gridded array of booleans. In all, the original 
- * array `arr` must be different from the output `arr_out`. In all these functions,
- * all arrays are presumed to be gridded as a uniform spherical grid and have 
- * identical shapes.
- */
-
-
-/**
- * Performs a distance transform and applies a threshold transform such that 
- * the resulting array contains `true` for all points withing the distance 
- * of `threshold` measured from the great-circle distances on the sphere.
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param arr initial 2D gridded boolean array
- * @param i_max length of the array along the first dimension
- * @param j_max length of the array along the second dimension
- * @param R the radius of the sphere
- * @param threshold distance threshold in radians
- * @param arr_out for the output transformed boolean array
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int gridded_fused_distance_threshold_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
-    double      R,
-    double      threshold,
-    bool *      arr_out
-);
-
-#ifdef CLIB_MULTITHREADED
-/**
- * Performs a distance transform and applies a threshold transform such that 
- * the resulting array contains `true` for all points withing the distance 
- * of `threshold` measured from the great-circle distances on the sphere.
- * This is the threaded version of `gridded_fused_distance_threshold_transform_64bit`.
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param arr initial 2D gridded boolean array
- * @param i_max length of the array along the first dimension
- * @param j_max length of the array along the second dimension
- * @param R the radius of the sphere
- * @param threshold distance threshold in radians
- * @param arr_out for the output transformed boolean array
- * @param num_threads number of threads
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int gridded_fused_distance_threshold_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out,
     int32_t     num_threads
 );
-#endif
-
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     pgridded_fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on a 2D gridded array of booleans. In all, the original 
- * array `arr` must be different from the output `arr_out`. In all these functions,
- * all arrays are presumed to be gridded as a uniform spherical grid and have 
- * identical shapes. Note that in the following functions, the grid does not 
- * fully cover the sphere.
- */
-
-
-/**
- * Performs a distance transform and applies a threshold transform such that 
- * the resulting array contains `true` for all points withing the distance 
- * of `threshold` measured from the great-circle distances on the sphere.
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param arr initial 2D gridded boolean array
- * @param i_max length of the array along the first dimension
- * @param j_max length of the array along the second dimension
- * @param R the radius of the sphere
- * @param theta_min lower theta range
- * @param theta_max upper theta range
- * @param phi_min lower theta range
- * @param phi_max upper theta range
- * @param threshold distance threshold in radians
- * @param arr_out for the output transformed boolean array
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int pgridded_fused_distance_threshold_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
-    double      R,
-    double      theta_min,
-    double      theta_max,
-    double      phi_min,
-    double      phi_max,
-    double      threshold,
-    bool *      arr_out
-);
-
-#ifdef CLIB_MULTITHREADED
-/**
- * Performs a distance transform and applies a threshold transform such that 
- * the resulting array contains `true` for all points withing the distance 
- * of `threshold` measured from the great-circle distances on the sphere.
- * This is the threaded version of `pgridded_fused_distance_threshold_transform_64bit`.
- * 
- * @param xs Cartesian x coordinates
- * @param ys Cartesian y coordinates
- * @param zs Cartesian z coordinates 
- * @param arr initial 2D gridded boolean array
- * @param i_max length of the array along the first dimension
- * @param j_max length of the array along the second dimension
- * @param R the radius of the sphere
- * @param theta_min lower theta range
- * @param theta_max upper theta range
- * @param phi_min lower theta range
- * @param phi_max upper theta range
- * @param threshold distance threshold in radians
- * @param arr_out for the output transformed boolean array
- * @param num_threads number of threads
- * 
- * @returns 0 if no error
- */
-CLIB_EXPORT int pgridded_fused_distance_threshold_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
-    double      R,
-    double      theta_min,
-    double      theta_max,
-    double      phi_min,
-    double      phi_max,
-    double      threshold,
-    bool *      arr_out,
-    int32_t     num_threads
-);
-#endif
 
 #endif

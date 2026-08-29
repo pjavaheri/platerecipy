@@ -1,8 +1,8 @@
+include src/clib/grid.c
+include src/clib/grid.h
 include src/clib/transform.c
 include src/clib/transform.h
 include src/clib/segmentation.c
 include src/clib/segmentation.h
-include src/clib/legacyvtk.c
-include src/clib/legacyvtk.h
 include LICENSE
 include pyproject.toml

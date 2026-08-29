@@ -6,794 +6,344 @@
 
 #include "transform.h"
 
+
 #ifdef _WIN32
-void PyInit_libplaterecipy_transform() {};
+    #ifndef PYINIT_LIBPLATERECIPY_TRANSFORM
+        #define PYINIT_LIBPLATERECIPY_TRANSFORM
+        void PyInit_libplaterecipy_transform() {};
+    #endif
 #endif
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//      single_plate_interior_distance_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the spherical distance 
- * transform is to be applied on the interior of only a single plates, indicated 
- * by the initial -1 values for plate interior and -2 values for point not on 
- * the plate.
- */
 
+// ~~~~~ Callback mechanism for the Python logger ~~~~~
 
-int single_plate_interior_distance_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out
+void set_transform_h_logger(
+    transform_h_log_func func
 ) {
-    // first, only working with Cartesian distance
-    const double ONE_OVER_TWO_R_SQUARED = 1./(2.*R*R);
-    const double MAX_CARTESIAN_DISTANCE = 4.*R*R;
-    
-    for (int i = 0; i < num_points; i++) {
-        if (arr_out[i] == -1.) {
-            arr_out[i] = MAX_CARTESIAN_DISTANCE;
-            for (int j = 0; j < num_points; j++) {
-                if (arr_out[j] == -2.) {
-                    // the point [j] is not on the plate
-
-                    // crude checking whether to even bother with
-                    // spherical distance
-                    const double dx = xs[j] - xs[i];
-                    const double dy = ys[j] - ys[i];
-                    const double dz = zs[j] - zs[i];
-                    const double d2 = dx*dx + dy*dy + dz*dz;
-                    if (d2 < arr_out[i]) {
-                        arr_out[i] = d2;
-                    }
-                }
-            }
-            // converting the minimum Cartesian distance to geodesic
-            arr_out[i] = acos(1. - ONE_OVER_TWO_R_SQUARED*arr_out[i]);
-        }    
-    }
-    return 0;
+    transform_h_logger = func;
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#ifdef CLIB_MULTITHREADED
-/**
- * (internal)
- * Argument struct for the threaded function:
- * `single_plate_interior_distance_transform_64bit_threaded_func`
- * The parameters are exactly as listed for:
- * `full_plate_interior_distance_transform_64bit_threaded_func`
- * 
- * @warning: `plate_IDs` is only used for 
- *           `full_plate_interior_distance_transform_64bit_threaded_func`
- */
-struct plate_interior_distance_transform_64bit_threaded_args {
-    double *    xs;
-    double *    ys;
-    double *    zs;
-    int32_t *   plate_IDs;
-    int32_t     num_points;
-    double      R;
-    double *    arr_out;
-    int32_t     num_threads;
-    int32_t     i_thread;
-};
 
-/**
- * (internal)
- * Threaded function for `single_plate_interior_distance_transform_64bit_threaded`
- * 
- * @param args the argument struct containing function parameters
- */
-void * single_plate_interior_distance_transform_64bit_threaded_func(
-    void * args
-) {
-    /**
-     * Assumes that plate_IDs are initialized with -1. and 0. :
-     *      -> -1. corresponds to the plate of interest
-     *      -> -2. corresponds to other plates
-     */
+// ~~~~~~~~~~~~~~~~ Internal functions ~~~~~~~~~~~~~~~~~
 
-    struct plate_interior_distance_transform_64bit_threaded_args * targs =
-        (struct plate_interior_distance_transform_64bit_threaded_args *) args;
-    
-
-    int i_start = (targs->num_points / targs->num_threads)*(targs->i_thread);
-    int i_end   = (targs->num_points / targs->num_threads)*(targs->i_thread +1);
-
-    // to prevent missing out due to division round downs
-    if (targs->i_thread == targs->num_threads - 1) {
-        i_end = targs->num_points;
+int add_if_not_stored(int * array, int current_size, int item) {
+    bool found = false;
+    for (int i = current_size-1; i >= 0; i--) {
+        if (array[i] == item) {
+            found = true;
+            break;
+        }
     }
-
-    // first, only working with Cartesian distance
-    const double ONE_OVER_TWO_R_SQUARED = 1./(2. * targs->R * targs->R);
-    const double MAX_CARTESIAN_DISTANCE = 4. * targs->R * targs->R;
-    
-    for (int i = i_start; i < i_end; i++) {
-        if (targs->arr_out[i] == -1.) {
-            targs->arr_out[i] = MAX_CARTESIAN_DISTANCE;
-            for (int j = 0; j < targs->num_points; j++) {
-                if (targs->arr_out[j] == -2.) {
-                    // the point [j] is not on the plate
-
-                    // crude checking whether to even bother with
-                    // spherical distance
-                    const double dx = targs->xs[j] - targs->xs[i];
-                    const double dy = targs->ys[j] - targs->ys[i];
-                    const double dz = targs->zs[j] - targs->zs[i];
-                    const double d2 = dx*dx + dy*dy + dz*dz;
-                    if (d2 < targs->arr_out[i]) {
-                        targs->arr_out[i] = d2;
-                    }
-                }
-            }
-            // converting the minimum Cartesian distance to geodesic
-            targs->arr_out[i] = acos(
-                1. - ONE_OVER_TWO_R_SQUARED * targs->arr_out[i]
-            );
-        }    
+    if (!found) {
+        array[current_size++] = item;
     }
-    return NULL;
+    return current_size;
 }
 
-
-int single_plate_interior_distance_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out,
-    int32_t     num_threads
-) {
-    pthread_t tids[num_threads];
-    struct plate_interior_distance_transform_64bit_threaded_args targss[num_threads];
-
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        targss[i_thread].xs             = xs;
-        targss[i_thread].ys             = ys;
-        targss[i_thread].zs             = zs;
-        targss[i_thread].num_points     = num_points;
-        targss[i_thread].R              = R;
-        targss[i_thread].arr_out        = arr_out;
-        targss[i_thread].num_threads    = num_threads;
-        targss[i_thread].i_thread       = i_thread;
-
-        // creating threads
-        pthread_create(
-            &tids[i_thread], 
-            NULL, 
-            single_plate_interior_distance_transform_64bit_threaded_func, 
-            &targss[i_thread]
-        );
-    }
-    
-    // waiting for all threads to be done
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        pthread_join(tids[i_thread], NULL);
+bool is_false_border_node(Map * map, int idx, bool * markers, bool safe_mode) {
+    if (markers[map->nodes[idx].npy_idx]) {
+        // discarding the node if True
+        return false;
     }
 
-    return 0;
-}
-#endif
+    // checking for the first-order and second-order neighbours (if safe_mode)
+    for (int i = 0; i < map->nodes[idx].num_neighs; i++) {
+        const int neigh_idx = map->nodes[idx].neighs[i];
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//       full_plate_interior_distance_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the spherical distance 
- * transform is to be applied on the interior of all plates, indicated in the
- * `plate_IDs` array.
- */
+        if (markers[map->nodes[neigh_idx].npy_idx]) {
+            // this means the node has a 1st-order True neighbour
+            return true;
+        }
+        
+        if (safe_mode) {
+            // checking for 2nd neighbours
+            for (int j = 0; j < map->nodes[neigh_idx].num_neighs; j++) {
+                const int neigh_neigh_idx = map->nodes[neigh_idx].neighs[j]; 
 
-int full_plate_interior_distance_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t *   plate_IDs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out
-) {
-    // first, only working with Cartesian distance
-    const double ONE_OVER_TWO_R_SQUARED = 1./(2.*R*R);
-    const double MAX_CARTESIAN_DISTANCE = 4.*R*R;
-    
-    for (int i = 0; i < num_points; i++) {
-        arr_out[i] = MAX_CARTESIAN_DISTANCE;
-        for (int j = 0; j < num_points; j++) {
-            if (plate_IDs[j] != plate_IDs[i]) {
-                // the point [j] is not on the plate
-
-                // crude checking whether to even bother with
-                // spherical distance
-                const double dx = xs[j] - xs[i];
-                const double dy = ys[j] - ys[i];
-                const double dz = zs[j] - zs[i];
-                const double d2 = dx*dx + dy*dy + dz*dz;
-                if (d2 < arr_out[i]) {
-                    arr_out[i] = d2;
+                if (markers[map->nodes[neigh_neigh_idx].npy_idx]) {
+                    // this means the node has a 2nd-order True neighbour
+                    return true;
                 }
             }
         }
-        // converting the minimum Cartesian distance to geodesic
-        arr_out[i] = acos(1. - ONE_OVER_TWO_R_SQUARED*arr_out[i]);
-    }    
-    return 0;
-}
-
-#ifdef CLIB_MULTITHREADED
-/**
- * (internal)
- * Threaded function for `full_plate_interior_distance_transform_64bit_threaded`
- * 
- * @param args the argument struct containing function parameters
- */
-void * full_plate_interior_distance_transform_64bit_threaded_func(
-    void * args
-) {
-    struct plate_interior_distance_transform_64bit_threaded_args * targs =
-        (struct plate_interior_distance_transform_64bit_threaded_args *) args;
-    
-
-    int i_start = (targs->num_points / targs->num_threads)*(targs->i_thread);
-    int i_end   = (targs->num_points / targs->num_threads)*(targs->i_thread +1);
-
-    // to prevent missing out due to division round downs
-    if (targs->i_thread == targs->num_threads - 1) {
-        i_end = targs->num_points;
+        
     }
 
-    // first, only working with Cartesian distance
-    const double ONE_OVER_TWO_R_SQUARED = 1./(2. * targs->R * targs->R);
-    const double MAX_CARTESIAN_DISTANCE = 4. * targs->R * targs->R;
-    
-    for (int i = i_start; i < i_end; i++) {
-        targs->arr_out[i] = MAX_CARTESIAN_DISTANCE;
-        for (int j = 0; j < targs->num_points; j++) {
-            if (targs->plate_IDs[j] != targs->plate_IDs[i]) {
-                // the point [j] is not on the plate
+    return false;
+}
 
-                // crude checking whether to even bother with
-                // spherical distance
-                const double dx = targs->xs[j] - targs->xs[i];
-                const double dy = targs->ys[j] - targs->ys[i];
-                const double dz = targs->zs[j] - targs->zs[i];
-                const double d2 = dx*dx + dy*dy + dz*dz;
-                if (d2 < targs->arr_out[i]) {
-                    targs->arr_out[i] = d2;
-                }
-            }
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+// ~~~~~~~~~~~~~~~~ Exposed functions ~~~~~~~~~~~~~~~~~
+
+void label_markers_from_map(
+    Map *       map,
+    bool *      markers,
+    int32_t *   labels
+) {
+    if (transform_h_logger) transform_h_logger("Assigning integer labels to connected patches ...");
+
+    int max_stack_size = 0;
+    for (int i = 0; i < map->num_nodes; i++) {
+        if (markers[i]) {
+            max_stack_size++;
+            labels[i] = -1; // marked but not yet processed
+        } else {
+            labels[i] = 0; // unmarked, so they are assigned zero
         }
-        // converting the minimum Cartesian distance to geodesic
-        targs->arr_out[i] = acos(
-            1. - ONE_OVER_TWO_R_SQUARED * targs->arr_out[i]
-        );
-    }
-    return NULL;
-}
-
-int full_plate_interior_distance_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    int32_t *   plate_IDs,
-    int32_t     num_points,
-    double      R,
-    double *    arr_out,
-    int32_t     num_threads
-) {
-    pthread_t tids[num_threads];
-    struct plate_interior_distance_transform_64bit_threaded_args targss[num_threads];
-
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        targss[i_thread].xs             = xs;
-        targss[i_thread].ys             = ys;
-        targss[i_thread].zs             = zs;
-        targss[i_thread].plate_IDs      = plate_IDs;
-        targss[i_thread].num_points     = num_points;
-        targss[i_thread].R              = R;
-        targss[i_thread].arr_out        = arr_out;
-        targss[i_thread].num_threads    = num_threads;
-        targss[i_thread].i_thread       = i_thread;
-
-        // creating threads
-        pthread_create(
-            &tids[i_thread], 
-            NULL, 
-            full_plate_interior_distance_transform_64bit_threaded_func, 
-            &targss[i_thread]
-        );
     }
     
-    // waiting for all threads to be done
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        pthread_join(tids[i_thread], NULL);
-    }
+    int * idx_stack = malloc(max_stack_size * sizeof(int));
+    int current_label = 1;
 
-    return 0;
-}
-#endif
+    for (int idx = 0; idx < map->num_nodes; idx++) {
+        if (labels[map->nodes[idx].npy_idx] < 0) {
+            // an unprocessed marked node
+            
+            
+            // initializing a new stack
+            int top = 0;
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on any array of booleans. In all, the original 
- * array `arr` must be different from the output `arr_out`.
- */
+            // pushing
+            idx_stack[top++] = idx;
+            labels[map->nodes[idx].npy_idx] = current_label;
 
-int fused_distance_threshold_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     num_points,
-    double      R,
-    double      threshold,
-    bool *      arr_out
-) {
-    // first, only working with Cartesian distance
-    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
-    
-    for (int i = 0; i < num_points; i++) {
-        if (arr[i]) {
-            arr_out[i] = true;
-            for (int j = 0; j < num_points; j++) {
-                if (!arr_out[j]) {
-                    // the point [j] is not on the plate
+            while (top > 0) {
+                // popping the stack
+                const int popped_idx = idx_stack[--top];
 
-                    // crude checking whether to even bother with
-                    // spherical distance
-                    const double dx = xs[j] - xs[i];
-                    const double dy = ys[j] - ys[i];
-                    const double dz = zs[j] - zs[i];
-                    const double d2 = dx*dx + dy*dy + dz*dz;
-
-                    arr_out[j] = d2 < THRESHOLD_D_SQUARED;
-                }
-            }
-        }    
-    }
-    return 0;
-}
-
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     gridded_fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on a 2D gridded array of booleans. In all, the original 
- * array `arr` must be different from the output `arr_out`.
- */
-
-int gridded_fused_distance_threshold_transform_64bit(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
-    double      R,
-    double      threshold,
-    bool *      arr_out
-) {
-    // as a spherical grid, the first and last columns are the same
-
-    // first, only working with Cartesian distance
-    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
-    
-    const double dlat = PI / ((double) (i_max - 1)); 
-    const int di = (int) (threshold / dlat) + 2;        // +2 for a conservative
-
-    for (int i = 0; i < i_max; i++) {
-        for (int j = 0; j < j_max; j++) {
-            const int ref_index = i*j_max + j;
-            if (arr[ref_index]) {
-                arr_out[ref_index] = true;
-
-                int i_start = 0;
-                int i_end   = i_max-1;
-
-                if ((i - di) > 0)         i_start = i - di;
-                if ((i + di) < i_max-1)   i_end   = i + di;
-
-                for (int ii = i_start; ii <= i_end; ii++) {
-                    for (int jj = 0; jj < j_max; jj++) {
-                        const int index = ii*j_max + jj;
-                        if (!arr_out[index]) {
-                            // the point [j] is not on the plate
-
-                            // crude checking whether to even bother with
-                            // spherical distance
-                            const double dx = xs[index] - xs[ref_index];
-                            const double dy = ys[index] - ys[ref_index];
-                            const double dz = zs[index] - zs[ref_index];
-                            const double d2 = dx*dx + dy*dy + dz*dz;
-                            
-                            arr_out[index] = d2 < THRESHOLD_D_SQUARED;
-                        }
+                for (int j = 0; j < map->nodes[popped_idx].num_neighs; j++) {
+                    const int neigh_idx = map->nodes[popped_idx].neighs[j];
+                    if (labels[map->nodes[neigh_idx].npy_idx] < 0) {
+                        // an uprocessed marked neighbour
+                        
+                        // pushing
+                        idx_stack[top++] = neigh_idx;
+                        labels[map->nodes[neigh_idx].npy_idx] = current_label;
                     }
                 }
-            }    
-        }
+            }
 
-        // the first and last columns are the same
-        //arr_out[i*j_max + (j_max-1)] = arr_out[i*j_max];
+            current_label++;
+        }
     }
 
-    return 0;
+    free(idx_stack);
+    if (transform_h_logger) transform_h_logger("... done.");
 }
 
-#ifdef CLIB_MULTITHREADED
-/**
- * (internal)
- * Argument struct for the threaded function:
- * `gridded_fused_distance_threshold_transform_64bit_threaded_func`
- * The parameters are exactly as listed for:
- * `gridded_fused_distance_threshold_transform_64bit_threaded_func`
- */
-struct gridded_fused_distance_threshold_transform_64bit_threaded_args {
+
+#if defined(__APPLE__) && defined(__MACH__) && !defined(_OPENMP)
+
+struct inverted_fused_distance_threshold_transform_on_map_args {
+    Map *       map;
     double *    xs;
     double *    ys;
     double *    zs;
     bool *      arr;
-    int32_t     i_max;
-    int32_t     j_max;
-    double      R;
-    double      threshold;
     bool *      arr_out;
+    int32_t *   border_nodes_npy_idx;
+    int32_t     num_border_nodes;
+    double      THRESHOLD_D_SQUARED;
     int32_t     num_threads;
     int32_t     i_thread;
 };
 
-/**
- * (internal)
- * Threaded function for `single_plate_interior_distance_transform_64bit_threaded`
- * 
- * @param args the argument struct containing function parameters
- */
-void * gridded_fused_distance_threshold_transform_64bit_threaded_func(
+void * inverted_fused_distance_threshold_transform_on_map_func (
     void * args
 ) {
-    /**
-     * Assumes that plate_IDs are initialized with -1. and 0. :
-     *      -> -1. corresponds to the plate of interest
-     *      -> -2. corresponds to other plates
-     */
-
-    struct gridded_fused_distance_threshold_transform_64bit_threaded_args * targs =
-        (struct gridded_fused_distance_threshold_transform_64bit_threaded_args *) args;
+    struct inverted_fused_distance_threshold_transform_on_map_args * targs = 
+        (struct inverted_fused_distance_threshold_transform_on_map_args *) args;
     
-    int i_start = (targs->i_max / targs->num_threads)*(targs->i_thread);
-    int i_end   = (targs->i_max / targs->num_threads)*(targs->i_thread +1);
+    int idx_min = (targs->map->num_nodes / targs->num_threads)*(targs->i_thread);
+    int idx_max = (targs->map->num_nodes / targs->num_threads)*(targs->i_thread +1);
 
     // to prevent missing out due to division round downs
     if (targs->i_thread == targs->num_threads - 1) {
-        i_end = targs->i_max;
+        idx_max = targs->map->num_nodes;
     }
 
-    // as a spherical grid, the first and last columns are the same
-
-    // first, only working with Cartesian distance
-    const double THRESHOLD_D_SQUARED = 2.*targs->R*targs->R*(1. - cos(targs->threshold));
-    
-    const double dlat = PI / ((double) targs->i_max - 1); 
-    const int di = (int) (targs->threshold / dlat) + 2;        // +2 for a conservative
-
-    for (int i = i_start; i < i_end; i++) {
-        for (int j = 0; j < targs->j_max; j++) {
-            const int ref_index = i*targs->j_max + j;
-            if (targs->arr[ref_index]) {
-                targs->arr_out[ref_index] = true;
-
-                int ii_start = 0;
-                int ii_end   = targs->i_max-1;
-
-                if ((i - di) > 0)               ii_start = i - di;
-                if ((i + di) < targs->i_max-1)  ii_end   = i + di;
-
-                for (int ii = ii_start; ii <= ii_end; ii++) {
-                    for (int jj = 0; jj < targs->j_max; jj++) {
-                        const int index = ii*targs->j_max + jj;
-                        if (!targs->arr_out[index]) {
-                            // the point [j] is not on the plate
-
-                            // crude checking whether to even bother with
-                            // spherical distance
-                            const double dx = targs->xs[index] - targs->xs[ref_index];
-                            const double dy = targs->ys[index] - targs->ys[ref_index];
-                            const double dz = targs->zs[index] - targs->zs[ref_index];
-                            const double d2 = dx*dx + dy*dy + dz*dz;
-                            
-                            targs->arr_out[index] = d2 < THRESHOLD_D_SQUARED;
-                        }
-                    }
+    for (int idx = idx_min; idx < idx_max; idx++) {
+        const int ref_npy_idx = targs->map->nodes[idx].npy_idx;
+        if (targs->arr[ref_npy_idx]) {
+            for (int j = 0; j < targs->num_border_nodes; j++) {
+                const int border_npy_idx = targs->border_nodes_npy_idx[j];
+                
+                const double dx = targs->xs[border_npy_idx] - targs->xs[ref_npy_idx];
+                const double dy = targs->ys[border_npy_idx] - targs->ys[ref_npy_idx];
+                const double dz = targs->zs[border_npy_idx] - targs->zs[ref_npy_idx];
+                const double d2 = dx*dx + dy*dy + dz*dz;
+                
+                if (d2 < targs->THRESHOLD_D_SQUARED) {
+                    targs->arr_out[ref_npy_idx] = false;
+                    break;
                 }
-            }    
+            }
         }
-
-        // the first and last columns are the same
-        //targs->arr_out[i*targs->j_max + (targs->j_max-1)] = 
-        //        targs->arr_out[i*targs->j_max];
     }
-
-    return NULL;
 }
 
-
-int gridded_fused_distance_threshold_transform_64bit_threaded(
+void inverted_fused_distance_threshold_transform_on_map(
+    Map *       map,
     double *    xs,
     double *    ys,
     double *    zs,
     bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
     double      R,
     double      threshold,
     bool *      arr_out,
     int32_t     num_threads
 ) {
+    if (transform_h_logger) transform_h_logger("Performing an inverted fused distace transfrom ...");
+    /**
+    THIS IS UNLIKE TYPICAL DISTANCE TRANSFORMS
+    THE TRANSFORM IS APPLIED ON THE FALSE VALUES INSTEAD!
+    MEANING -> THE FALSE BANDS GET WIDER
+    */
+
+    int num_border_nodes = 0;
+    int * border_nodes_npy_idx = (int *) malloc(map->num_nodes * sizeof(int));
+
+    
+    for (int idx = 0; idx < map->num_nodes; idx++) {
+        const int ref_npy_idx = map->nodes[idx].npy_idx;
+
+        // first, initializing output to be the same as input
+        arr_out[ref_npy_idx] = arr[ref_npy_idx];
+        
+        // we keep a list of nodes that comprise the boundary to the FALSE
+        // region, so that we only check for proximity to them (instead of all FALSE values)
+        if (is_false_border_node(map, idx, arr, true)) {
+            border_nodes_npy_idx[num_border_nodes++] = ref_npy_idx;
+        }
+    }
+
+    
+
+    // if planar, THRESHOLD_D_SQUARED should be merely (R*threshold)^2
+    if (map->grid_type == GTYPE_PLANAR) {
+        if (transform_h_logger) transform_h_logger("... rescaling R for the distance transform so that R*separation_tolerance == Euclidean distance");
+        // we scale the local R so that the constant THRESHOLD_D_SQUARED
+        // becomes what we want, instead of the great-circle distance
+        R *= threshold*sqrt(1/(2*(1. - cos(threshold))));
+    }
+    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
+
+    
+    if (transform_h_logger) transform_h_logger("... using manual threads to parallelize the loop");
+    
     pthread_t tids[num_threads];
-    struct gridded_fused_distance_threshold_transform_64bit_threaded_args targss[num_threads];
+    struct inverted_fused_distance_threshold_transform_on_map_args targss[num_threads];
 
     for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        targss[i_thread].xs             = xs;
-        targss[i_thread].ys             = ys;
-        targss[i_thread].zs             = zs;
-        targss[i_thread].arr            = arr;
-        targss[i_thread].i_max          = i_max;
-        targss[i_thread].j_max          = j_max;
-        targss[i_thread].R              = R;
-        targss[i_thread].threshold      = threshold;
-        targss[i_thread].arr_out        = arr_out;
-        targss[i_thread].num_threads    = num_threads;
-        targss[i_thread].i_thread       = i_thread;
+        targss[i_thread].map                    = map;
+        targss[i_thread].xs                     = xs;
+        targss[i_thread].ys                     = ys;
+        targss[i_thread].zs                     = zs;
+        targss[i_thread].arr                    = arr;
+        targss[i_thread].arr_out                = arr_out;
+        targss[i_thread].border_nodes_npy_idx   = border_nodes_npy_idx;
+        targss[i_thread].num_border_nodes       = num_border_nodes;
+        targss[i_thread].THRESHOLD_D_SQUARED    = THRESHOLD_D_SQUARED;
+        targss[i_thread].num_threads            = num_threads;
+        targss[i_thread].i_thread               = i_thread;
 
         // creating threads
         pthread_create(
             &tids[i_thread], 
             NULL, 
-            gridded_fused_distance_threshold_transform_64bit_threaded_func, 
+            inverted_fused_distance_threshold_transform_on_map_func, 
             &targss[i_thread]
         );
     }
-    
+
     // waiting for all threads to be done
     for (int i_thread=0; i_thread < num_threads; i_thread++) {
         pthread_join(tids[i_thread], NULL);
     }
-    return 0;
+    
+    free(border_nodes_npy_idx);
+    if (transform_h_logger) transform_h_logger("... done.");
 }
-#endif
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     pgridded_fused_distance_threshold_transform
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/**
- * The following set of functions are to be used when the fused distance 
- * transform is applied on a 2D partially gridded array of booleans. In all, 
- * the original array `arr` must be different from the output `arr_out`.
- */
+#else
 
-int pgridded_fused_distance_threshold_transform_64bit(
+void inverted_fused_distance_threshold_transform_on_map(
+    Map *       map,
     double *    xs,
     double *    ys,
     double *    zs,
     bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
     double      R,
-    double      theta_min,
-    double      theta_max,
-    double      phi_min,
-    double      phi_max,
-    double      threshold,
-    bool *      arr_out
-) {
-    // as a spherical grid, the first and last columns are the same
-
-    // first, only working with Cartesian distance
-    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
-    
-    const double dlat = (theta_max - theta_min) / ((double) (i_max - 1)); 
-    const int di = (int) (threshold / dlat) + 2;        // +2 for a conservative
-
-    for (int i = 0; i < i_max; i++) {
-        for (int j = 0; j < j_max; j++) {
-            const int ref_index = i*j_max + j;
-            if (arr[ref_index]) {
-                arr_out[ref_index] = true;
-
-                int i_start = 0;
-                int i_end   = i_max-1;
-
-                if ((i - di) > 0)         i_start = i - di;
-                if ((i + di) < i_max-1)   i_end   = i + di;
-
-                for (int ii = i_start; ii <= i_end; ii++) {
-                    for (int jj = 0; jj < j_max; jj++) {
-                        const int index = ii*j_max + jj;
-                        if (!arr_out[index]) {
-                            // the point [j] is not on the plate
-
-                            // crude checking whether to even bother with
-                            // spherical distance
-                            const double dx = xs[index] - xs[ref_index];
-                            const double dy = ys[index] - ys[ref_index];
-                            const double dz = zs[index] - zs[ref_index];
-                            const double d2 = dx*dx + dy*dy + dz*dz;
-                            
-                            arr_out[index] = d2 < THRESHOLD_D_SQUARED;
-                        }
-                    }
-                }
-            }    
-        }
-
-        // the first and last columns are the same
-        //arr_out[i*j_max + (j_max-1)] = arr_out[i*j_max];
-    }
-
-    return 0;
-}
-
-#ifdef CLIB_MULTITHREADED
-/**
- * (internal)
- * Argument struct for the threaded function:
- * `pgridded_fused_distance_threshold_transform_64bit_threaded_func`
- * The parameters are exactly as listed for:
- * `pgridded_fused_distance_threshold_transform_64bit_threaded_func`
- */
-struct pgridded_fused_distance_threshold_transform_64bit_threaded_args {
-    double *    xs;
-    double *    ys;
-    double *    zs;
-    bool *      arr;
-    int32_t     i_max;
-    int32_t     j_max;
-    double      R;
-    double      theta_min;
-    double      theta_max;
-    double      phi_min;
-    double      phi_max;
-    double      threshold;
-    bool *      arr_out;
-    int32_t     num_threads;
-    int32_t     i_thread;
-};
-
-/**
- * (internal)
- * Threaded function for `single_plate_interior_distance_transform_64bit_threaded`
- * 
- * @param args the argument struct containing function parameters
- */
-void * pgridded_fused_distance_threshold_transform_64bit_threaded_func(
-    void * args
-) {
-    /**
-     * Assumes that plate_IDs are initialized with -1. and 0. :
-     *      -> -1. corresponds to the plate of interest
-     *      -> -2. corresponds to other plates
-     */
-
-    struct pgridded_fused_distance_threshold_transform_64bit_threaded_args * targs =
-        (struct pgridded_fused_distance_threshold_transform_64bit_threaded_args *) args;
-    
-    int i_start = (targs->i_max / targs->num_threads)*(targs->i_thread);
-    int i_end   = (targs->i_max / targs->num_threads)*(targs->i_thread +1);
-
-    // to prevent missing out due to division round downs
-    if (targs->i_thread == targs->num_threads - 1) {
-        i_end = targs->i_max;
-    }
-
-    // as a spherical grid, the first and last columns are the same
-
-    // first, only working with Cartesian distance
-    const double THRESHOLD_D_SQUARED = 2.*targs->R*targs->R*(1. - cos(targs->threshold));
-    
-    const double dlat = (targs->theta_max - targs->theta_min) / ((double) targs->i_max); 
-    const int di = (int) (targs->threshold / dlat) + 2;        // +2 for a conservative
-
-    for (int i = i_start; i < i_end; i++) {
-        for (int j = 0; j < targs->j_max; j++) {
-            const int ref_index = i*targs->j_max + j;
-            if (targs->arr[ref_index]) {
-                targs->arr_out[ref_index] = true;
-
-                int ii_start = 0;
-                int ii_end   = targs->i_max-1;
-
-                if ((i - di) > 0)               ii_start = i - di;
-                if ((i + di) < targs->i_max-1)  ii_end   = i + di;
-
-                for (int ii = ii_start; ii <= ii_end; ii++) {
-                    for (int jj = 0; jj < targs->j_max; jj++) {
-                        const int index = ii*targs->j_max + jj;
-                        if (!targs->arr_out[index]) {
-                            // the point [j] is not on the plate
-
-                            // crude checking whether to even bother with
-                            // spherical distance
-                            const double dx = targs->xs[index] - targs->xs[ref_index];
-                            const double dy = targs->ys[index] - targs->ys[ref_index];
-                            const double dz = targs->zs[index] - targs->zs[ref_index];
-                            const double d2 = dx*dx + dy*dy + dz*dz;
-                            
-                            targs->arr_out[index] = d2 < THRESHOLD_D_SQUARED;
-                        }
-                    }
-                }
-            }    
-        }
-
-        // the first and last columns are the same
-        //targs->arr_out[i*targs->j_max + (targs->j_max-1)] = 
-        //        targs->arr_out[i*targs->j_max];
-    }
-
-    return NULL;
-}
-
-
-int pgridded_fused_distance_threshold_transform_64bit_threaded(
-    double *    xs,
-    double *    ys,
-    double *    zs,
-    bool *      arr,
-    int32_t     i_max,
-    int32_t     j_max,
-    double      R,
-    double      theta_min,
-    double      theta_max,
-    double      phi_min,
-    double      phi_max,
     double      threshold,
     bool *      arr_out,
     int32_t     num_threads
 ) {
-    pthread_t tids[num_threads];
-    struct pgridded_fused_distance_threshold_transform_64bit_threaded_args targss[num_threads];
+    if (transform_h_logger) transform_h_logger("Performing an inverted fused distace transfrom ...");
+    /**
+    THIS IS UNLIKE TYPICAL DISTANCE TRANSFORMS
+    THE TRANSFORM IS APPLIED ON THE FALSE VALUES INSTEAD!
+    MEANING -> THE FALSE BANDS GET WIDER
+    */
 
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        targss[i_thread].xs             = xs;
-        targss[i_thread].ys             = ys;
-        targss[i_thread].zs             = zs;
-        targss[i_thread].arr            = arr;
-        targss[i_thread].i_max          = i_max;
-        targss[i_thread].j_max          = j_max;
-        targss[i_thread].R              = R;
-        targss[i_thread].theta_min      = theta_min;
-        targss[i_thread].theta_max      = theta_max;
-        targss[i_thread].phi_min        = phi_min;
-        targss[i_thread].phi_max        = phi_max;
-        targss[i_thread].threshold      = threshold;
-        targss[i_thread].arr_out        = arr_out;
-        targss[i_thread].num_threads    = num_threads;
-        targss[i_thread].i_thread       = i_thread;
+    int num_border_nodes = 0;
+    int * border_nodes_npy_idx = (int *) malloc(map->num_nodes * sizeof(int));
 
-        // creating threads
-        pthread_create(
-            &tids[i_thread], 
-            NULL, 
-            pgridded_fused_distance_threshold_transform_64bit_threaded_func, 
-            &targss[i_thread]
-        );
+    
+    for (int idx = 0; idx < map->num_nodes; idx++) {
+        const int ref_npy_idx = map->nodes[idx].npy_idx;
+
+        // first, initializing output to be the same as input
+        arr_out[ref_npy_idx] = arr[ref_npy_idx];
+        
+        // we keep a list of nodes that comprise the boundary to the FALSE
+        // region, so that we only check for proximity to them (instead of all FALSE values)
+        if (is_false_border_node(map, idx, arr, true)) {
+            border_nodes_npy_idx[num_border_nodes++] = ref_npy_idx;
+        }
     }
 
-    // waiting for all threads to be done
-    for (int i_thread=0; i_thread < num_threads; i_thread++) {
-        pthread_join(tids[i_thread], NULL);
+    
+
+    // if planar, THRESHOLD_D_SQUARED should be merely (R*threshold)^2
+    if (map->grid_type == GTYPE_PLANAR) {
+        if (transform_h_logger) transform_h_logger("... rescaling R for the distance transform so that R*separation_tolerance == Euclidean distance");
+        // we scale the local R so that the constant THRESHOLD_D_SQUARED
+        // becomes what we want, instead of the great-circle distance
+        R *= threshold*sqrt(1/(2*(1. - cos(threshold))));
     }
-    return 0;
+    const double THRESHOLD_D_SQUARED = 2.*R*R*(1. - cos(threshold));
+
+    #ifdef _OPENMP
+    if (transform_h_logger) transform_h_logger("... using OpenMP to parallelize the loop");
+    omp_set_num_threads(num_threads); 
+
+    #pragma omp parallel for shared(map,arr,arr_out,border_nodes_npy_idx,xs,ys,zs)
+    #endif
+    for (int idx = 0; idx < map->num_nodes; idx++) {
+        const int ref_npy_idx = map->nodes[idx].npy_idx;
+        if (arr[ref_npy_idx]) {
+            for (int j = 0; j < num_border_nodes; j++) {
+                const int border_npy_idx = border_nodes_npy_idx[j];
+                
+                const double dx = xs[border_npy_idx] - xs[ref_npy_idx];
+                const double dy = ys[border_npy_idx] - ys[ref_npy_idx];
+                const double dz = zs[border_npy_idx] - zs[ref_npy_idx];
+                const double d2 = dx*dx + dy*dy + dz*dz;
+                
+                if (d2 < THRESHOLD_D_SQUARED) {
+                    arr_out[ref_npy_idx] = false;
+                    break;
+                }
+            }
+        }
+    }
+    
+    free(border_nodes_npy_idx);
+    if (transform_h_logger) transform_h_logger("... done.");
 }
+
 #endif

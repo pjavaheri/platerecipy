@@ -3,7 +3,6 @@
 @author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
 @brief Internal module for segmentation functions.
 """
-
 import logging
 log = logging.getLogger(__name__)
 
@@ -12,9 +11,9 @@ import numpy as np
 import scipy as sp
 
 from . import _INT, _FLOAT
-from .grid import Grid, PartialSphericalGrid, SphericalGrid
+from .grid import Grid, PartialSphericalGrid, SphericalGrid, Map
 
-# importing shared libraries
+# ~~~~~~~~~~~~~~ importing shared libraries ~~~~~~~~~~~~~
 import os
 import sysconfig
 
@@ -32,39 +31,61 @@ A Python access to `clib/segmentation.h` module.
 platerecipy_clib_segmentation = ctypes.CDLL(shared_object_path)
 
 
-
-def _labels_are_wraparound(labels: np.ndarray) -> bool:
-    """
-    (internal)
-    Checks to see if the provided labels adhere to azimuthal wraparound boundary
-    condition.
-
-    Warning
-    -------
-    This condition must be satisfied before solving for probabilities with 
-    wraparound (i.e., spherical) edges.
-
-    Parameters
-    ----------
-    labels: np.ndarray,
-        2D array of labels. The background is assumed to be zero.
-
-    
-    Returns
-    -------
-    bool
-    """
-    mask = (labels[:, 0] > 0) & (labels[:, -1] > 0)
-    return np.all(labels[:, 0][mask] == labels[:, -1][mask])
+# platerecipy_clib_segmentation.get_ordered_Laplacian_from_map() function signature
+platerecipy_clib_segmentation.get_ordered_Laplacian_from_map.argtypes = [
+    ctypes.POINTER(Map),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_double,
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_double)
+]
+platerecipy_clib_segmentation.get_ordered_Laplacian_from_map.restype = ctypes.c_int32
 
 
-def get_AB(
+# platerecipy_clib_segmentation.get_ordered_boundary_matrix_from_map() function signature
+platerecipy_clib_segmentation.get_ordered_boundary_matrix_from_map.argtypes = [
+    ctypes.POINTER(Map),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_int32,
+    ctypes.c_int32,
+    ctypes.POINTER(ctypes.c_double)
+]
+platerecipy_clib_segmentation.get_ordered_boundary_matrix_from_map.restype = None
+
+
+# platerecipy_clib_segmentation.get_IDs_and_probs_from_X_and_map() function signature
+platerecipy_clib_segmentation.get_IDs_and_probs_from_X_and_map.argtypes = [
+    ctypes.POINTER(Map),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.c_int32,
+    ctypes.c_int32,
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_int32,
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_double)
+]
+platerecipy_clib_segmentation.get_IDs_and_probs_from_X_and_map.restype = None
+
+
+# establishing a callback mechanism for enabling logging from c
+callback_func_type = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
+
+def _segmentation_h_c_log(msg):
+    log.debug(f"[platerecipy_clib_segmentation callback]: {msg.decode()}")
+
+_segmentation_h_callback = callback_func_type(_segmentation_h_c_log) # not to be removed
+platerecipy_clib_segmentation.set_segmentation_h_logger(_segmentation_h_callback)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+def get_AB_from_map(
     data             : np.ndarray,
     labels           : np.ndarray,
     beta             : float,
-    num_labelled     : int,
     largest_label    : int,
-    grid             = None
+    grid             : Grid
 ) -> tuple:
     """
     Constructs the RW linear system by generating the right-hand-side, `'A'`, and
@@ -81,18 +102,15 @@ def get_AB(
     beta : float,
         The beta factor for connection weights.
 
-    num_labelled : int,
-        Number of labelled (marked) nodes.
-
     largest_label : int,
         The largest label (i.e., the number of segments).
 
-    grid : Grid, optional
+    grid : Grid,
         An instance of the grid object to perform segmentation on.
     
     Returns
     -------
-    tuple(`A`, `RHS`, `ord2org`)
+    tuple(`A`, `RHS`)
 
 
     Warning
@@ -110,161 +128,48 @@ def get_AB(
     data    = data.astype(dtype=_FLOAT, order='C', copy=False)
     labels  = labels.astype(dtype=_INT, order='C', copy=False)
 
-    # getting image shape
-    n_i, n_j = data.shape
+
+    # total size of the problem
+    N = grid.map.contents.num_nodes
+    num_edges = grid.map.contents.num_edges
+
+    # vectors to contain non-diagonal Laplacian entries
+    rows    = np.zeros(num_edges*2, dtype=_INT,   order='C')
+    columns = np.zeros(num_edges*2, dtype=_INT,   order='C')
+    values  = np.zeros(num_edges*2, dtype=_FLOAT, order='C')
+
+    log.debug("Calling get_ordered_Laplacian_from_map form C")
+    num_labelled = platerecipy_clib_segmentation.get_ordered_Laplacian_from_map(
+        grid.map,
+        data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        ctypes.c_double(beta),
+        rows.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        columns.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        values.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    )
     
-    if isinstance(grid, SphericalGrid):
-        # total size of the problem
-        N = (n_i-2) * n_j + 2
-        num_edges = (2*n_i - 3)*n_j
+    L_ord = sp.sparse.csr_matrix((values, (rows, columns)), shape=(N, N), dtype=_FLOAT)
+    L_ord.setdiag(-np.ravel(L_ord.sum(axis=0)))
+    
+    L_U = L_ord[num_labelled:, num_labelled:]
+    B_T = L_ord[num_labelled:, :num_labelled]
 
-        # vectors to contain non-diagonal Laplacian entries
-        rows    = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        columns = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        values  = np.zeros(num_edges*2, dtype=_FLOAT, order='C')
-
-        # reference bookkeeping vectors to go back and forth between original 
-        # (row-major) and ordered (labeled followed by unlabeled).
-        ord2org = np.zeros(N, dtype=_INT, order='C')
-
-        log.debug("Calling get_ordered_Laplacian_vectors_sph form C")
-        platerecipy_clib_segmentation.get_ordered_Laplacian_vectors_sph(
-            data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_double(beta),
-            rows.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            columns.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        )
-        L_ord = sp.sparse.csr_matrix((values, (rows, columns)), shape=(N, N), dtype=_FLOAT)
-        L_ord.setdiag(-np.ravel(L_ord.sum(axis=0)))
-        
-        L_U = L_ord[num_labelled:, num_labelled:]
-        B_T = L_ord[num_labelled:, :num_labelled]
-
-        
-        M = np.zeros((num_labelled, largest_label), dtype=_FLOAT, order='C')
-        log.debug("Calling get_ordered_boundary_matrix_sph form C")
-        platerecipy_clib_segmentation.get_ordered_boundary_matrix_sph(
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_int32(num_labelled),
-            ctypes.c_int32(largest_label),
-            M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        )
-
-    elif isinstance(grid, PartialSphericalGrid):
-        # total size of the problem
-        N = n_i * n_j
-        num_edges = (n_i - 1)*n_j + n_i*(n_j - 1)
-
-        # vectors to contain non-diagonal Laplacian entries
-        rows    = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        columns = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        values  = np.zeros(num_edges*2, dtype=_FLOAT, order='C')
-
-        # reference bookkeeping vectors to go back and forth between original 
-        # (row-major) and ordered (labeled followed by unlabeled).
-        ord2org = np.zeros(N, dtype=_INT, order='C')
-
-        log.debug("Calling get_ordered_Laplacian_vectors_psph form C")
-        platerecipy_clib_segmentation.get_ordered_Laplacian_vectors_psph(
-            data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_double(grid.theta_range[0]),
-            ctypes.c_double(grid.theta_range[1]),
-            ctypes.c_double(grid.phi_range[0]),
-            ctypes.c_double(grid.phi_range[1]),
-            ctypes.c_double(beta),
-            #ctypes.c_double(max_beta_spatial_correction),
-            rows.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            columns.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        )
-
-        L_ord = sp.sparse.csr_matrix((values, (rows, columns)), shape=(N, N), dtype=_FLOAT)
-        L_ord.setdiag(-np.ravel(L_ord.sum(axis=0)))
-        
-        L_U = L_ord[num_labelled:, num_labelled:]
-        B_T = L_ord[num_labelled:, :num_labelled]
-
-        
-        M = np.zeros((num_labelled, largest_label), dtype=_FLOAT, order='C')
-        log.debug("Calling get_ordered_boundary_matrix form C")
-        platerecipy_clib_segmentation.get_ordered_boundary_matrix(
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_int32(num_labelled),
-            ctypes.c_int32(largest_label),
-            M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        )
-
-    elif isinstance(grid, Grid) or (grid is None):
-        # total size of the problem
-        N = n_i * n_j
-        num_edges = (n_i - 1)*n_j + n_i*(n_j - 1)
-
-        # vectors to contain non-diagonal Laplacian entries
-        rows    = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        columns = np.zeros(num_edges*2, dtype=_INT,   order='C')
-        values  = np.zeros(num_edges*2, dtype=_FLOAT, order='C')
-
-        # reference bookkeeping vectors to go back and forth between original 
-        # (row-major) and ordered (labeled followed by unlabeled).
-        ord2org = np.zeros(N, dtype=_INT, order='C')
-
-        log.debug("Calling get_ordered_Laplacian_vectors form C")
-        platerecipy_clib_segmentation.get_ordered_Laplacian_vectors(
-            data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_double(beta),
-            #ctypes.c_double(max_beta_spatial_correction),
-            rows.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            columns.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        )
-
-        L_ord = sp.sparse.csr_matrix((values, (rows, columns)), shape=(N, N), dtype=_FLOAT)
-        L_ord.setdiag(-np.ravel(L_ord.sum(axis=0)))
-        
-        L_U = L_ord[num_labelled:, num_labelled:]
-        B_T = L_ord[num_labelled:, :num_labelled]
-
-        
-        M = np.zeros((num_labelled, largest_label), dtype=_FLOAT, order='C')
-        log.debug("Calling get_ordered_boundary_matrix form C")
-        platerecipy_clib_segmentation.get_ordered_boundary_matrix(
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_int32(num_labelled),
-            ctypes.c_int32(largest_label),
-            M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        )
-    else:
-        raise ValueError('Grid not recognized. Valid options are "flat", "sph", or "psph".')
+    M = np.zeros((num_labelled, largest_label), dtype=_FLOAT, order='C')
+    log.debug("Calling get_ordered_boundary_matrix_from_map form C")
+    platerecipy_clib_segmentation.get_ordered_boundary_matrix_from_map(
+        grid.map,
+        labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        ctypes.c_int32(largest_label),
+        ctypes.c_int32(num_labelled),
+        M.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+    )
     
     A = L_U
     RHS = -B_T@M
 
     log.debug("The linear system is constructed.")
-    return A, RHS, ord2org
-
-
+    return A, RHS, num_labelled
 
 def solve_AX_B(
     A           : np.ndarray, 
@@ -351,11 +256,12 @@ def solve_AX_B(
 
     return X
 
+
 def random_walker(
     data                            : np.ndarray, 
     labels                          : np.ndarray,
+    grid                            : Grid,
     beta                            = 100.,
-    grid                            = None,
     solver                          = 'direct',
     solver_tol                      = 1e-3,
     max_beta_reduction_attempts     = 2,
@@ -418,179 +324,93 @@ def random_walker(
     represent the north and south poles such that each data[:, 0] and data[:, -1]
     slice contain the same values. Otherwise, unpredictable behavior may arise.
     """
-    if isinstance(grid, SphericalGrid):
-        if not _labels_are_wraparound(labels):
-            log.warning(
-                "The labels themselves do not appear to adhere to the azimuthal "
-                "wraparound boundary condition. This could likely result in "
-                "numerical instability when solving for the linear system."
-            )
+    # ensuring the input is of the expected type for C interface
+    data    = data.astype(dtype=_FLOAT, order='C', copy=False)
+    labels  = labels.astype(dtype=_INT, order='C', copy=False)
 
-        n_i, n_j    = data.shape[0], data.shape[1]-1        # last column == first
+    unique_labels = np.unique(labels.ravel())
+    if unique_labels.max()+1 == unique_labels.size:
+        largest_label = unique_labels.max()
+    else:
+        log.error("Labels must be sequential positive integers starting from 1.")
+        raise ValueError("Labels are not sequential.")
 
-        data    = data[:, :-1].astype(dtype=_FLOAT, order='C', copy=False)
-        labels  = labels[:, :-1].astype(dtype=_INT, order='C', copy=False)
-
-        if np.max(labels) == 1:
-            log.warning('Only 1 label was found.')
-            return np.ones((n_i, n_j+1), dtype=_INT, order='C'), \
-                np.ones((n_i, n_j+1), dtype=_FLOAT, order='C')
-        
-        unique_labels = np.unique(labels.ravel()[n_j-1:(n_i-1)*n_j + 1])
-        if unique_labels.max()+1 == unique_labels.size:
-            largest_label = unique_labels.max()
-            num_labelled  = np.sum(labels.ravel()[n_j-1:(n_i-1)*n_j + 1] > 0)
-        else:
-            log.error("Labels must be sequential positive integers starting from 1.")
-            raise ValueError("Labels are not sequential.")
-        
-        # since large values of beta may destabilize the numerical system (such
-        # that the solution gives rise to sum of probabilities greater than 1)
-        # a built-in mechanism is implemented that systematically reduces beta
-        # until convergence is reached.
-        attempt = 0
-        while attempt < max_beta_reduction_attempts + 1:
-            log.debug(f"Constructing the linear system with beta={beta * (beta_reduction_fraction**attempt)}.")
-            A, B, ord2org = get_AB(
-                data             = data,
-                labels           = labels,
-                beta             = beta * (beta_reduction_fraction**attempt),
-                num_labelled     = num_labelled,
-                largest_label    = largest_label,
-                grid             = grid
-            )
-
-            log.debug("Solving the linear system.")
-            X = solve_AX_B(A, B, tol=solver_tol, solver=solver)
-
-            residual = np.linalg.norm(B-A@X)
-            log.info(f"Residual of the linear solution = {residual:4.2e}.")
-
-            if residual < beta_reduction_residual_tol:
-                break    
-
-            attempt += 1
-
-        log.debug("Generating IDs and probabilities from X.")
-        
-        X       = X.astype(dtype=_FLOAT, order='C', copy=False)
-        IDs     = np.zeros((n_i, n_j), dtype=_INT, order='C')
-        probs   = np.zeros((n_i, n_j, X.shape[1]), _FLOAT, order='C')
-        
-        log.debug("Calling get_IDs_and_probs_from_X_sph from C")
-        platerecipy_clib_segmentation.get_IDs_and_probs_from_X_sph(
-            X.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int32(X.shape[0]),
-            ctypes.c_int32(X.shape[1]),
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_int32(num_labelled),
-            IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            probs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        ) 
-        
-
-        # constructing the composite probability field
-        full_probs      = probs
-        i_max, j_max, _ = full_probs.shape
-        probs           = np.zeros((i_max, j_max), dtype=_FLOAT, order='C')
-
-        for i in range(i_max):
-            for j in range(j_max):
-                prob_vec        = full_probs[i, j, :]
-                probs[i, j]     = prob_vec[np.argmax(prob_vec)]
-        
-        
-        IDs  [ 0, :]  = IDs  [ 0, -1]
-        IDs  [-1, :]  = IDs  [-1,  0]
-        probs[ 0, :]  = probs[ 0, -1]
-        probs[-1, :]  = probs[-1,  0]
-
-        IDs_temp, probs_temp = IDs, probs
-        IDs   = np.zeros((n_i, n_j+1), dtype=_INT  , order='C')
-        probs = np.zeros((n_i, n_j+1), dtype=_FLOAT, order='C')
-
-        IDs  [:, :-1] = IDs_temp  [:, :]
-        probs[:, :-1] = probs_temp[:, :]
-        IDs  [:, -1] = IDs  [:, 0]
-        probs[:, -1] = probs[:, 0]
-        del IDs_temp, probs_temp
-
+    if largest_label == 1:
+        log.warning('Only 1 label was found.')
+        return np.ones(data.shape, dtype=_INT, order='C'), \
+            np.ones(data.shape, dtype=_FLOAT, order='C')
     
-    elif (isinstance(grid, Grid)) or (grid is None):
-        n_i, n_j    = data.shape
+    # since large values of beta may destabilize the numerical system (such
+    # that the solution gives rise to sum of probabilities greater than 1)
+    # a built-in mechanism is implemented that systematically reduces beta
+    # until convergence is reached.
+    attempt = 0
+    while attempt < max_beta_reduction_attempts + 1:
+        log.debug(f"Constructing the linear system with beta={beta * (beta_reduction_fraction**attempt)}.")
+        A, B, num_labelled = get_AB_from_map(
+            data             = data,
+            labels           = labels,
+            beta             = beta * (beta_reduction_fraction**attempt),
+            largest_label    = largest_label,
+            grid             = grid
+        )
 
-        data    = data.astype(dtype=_FLOAT, order='C', copy=False)
-        labels  = labels.astype(dtype=_INT, order='C', copy=False)
+        log.debug("Solving the linear system.")
+        X = solve_AX_B(A, B, tol=solver_tol, solver=solver)
 
-        if np.max(labels) == 1:
-            log.warning('Only 1 label was found.')
-            return np.ones((n_i, n_j), dtype=_INT, order='C')
-        
-        unique_labels = np.unique(labels)
-        if unique_labels.max()+1 == unique_labels.size:
-            largest_label = unique_labels.max()
-            num_labelled  = np.sum(labels > 0)
-        else:
-            log.error("Labels must be sequential positive integers starting from 1.")
-            raise ValueError("Labels are not sequential.")
+        residual = np.linalg.norm(B-A@X)
+        log.info(f"Residual of the linear solution = {residual:4.2e}.")
 
-        attempt = 0
-        while attempt < max_beta_reduction_attempts + 1:
-            log.debug(f"Constructing the linear system with beta={beta * (beta_reduction_fraction**attempt)}.")
-            A, B, ord2org = get_AB(
-                data             = data,
-                labels           = labels,
-                beta             = beta * (beta_reduction_fraction**attempt),
-                num_labelled     = num_labelled,
-                largest_label    = largest_label,
-                grid             = grid
-            )
+        if residual < beta_reduction_residual_tol:
+            break    
 
-            log.debug("Solving the linear system.")
-            X = solve_AX_B(A, B, tol=solver_tol, solver=solver)
+        attempt += 1
 
-            residual = np.linalg.norm(B-A@X)
-            log.info(f"Residual of the linear solution = {residual:4.2e}.")
+    log.debug("Generating IDs and probabilities from X.")
+    
+    X       = X.astype(dtype=_FLOAT, order='C', copy=False)
+    IDs     = np.zeros(data.shape, dtype=_INT, order='C')
+    probs   = np.zeros((*data.shape, X.shape[1]), _FLOAT, order='C')
+    
+    log.debug("Calling get_IDs_and_probs_from_X_and_map from C")
+    platerecipy_clib_segmentation.get_IDs_and_probs_from_X_and_map(
+        grid.map,
+        X.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        ctypes.c_int32(X.shape[0]),
+        ctypes.c_int32(X.shape[1]),
+        labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        ctypes.c_int32(num_labelled),
+        IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        probs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+    ) 
 
-            if residual < beta_reduction_residual_tol:
-                break    
+    # constructing the composite probability field
+    if len(probs.shape) == 2:
+        # one-dimensional data
+        i_max, _ = probs.shape
+        ID_probs = np.zeros(i_max, dtype=_FLOAT, order='C')
 
-            attempt += 1
-
-        log.debug("Generating IDs and probabilities from X.")
-        
-        X       = X.astype(dtype=_FLOAT, order='C', copy=False)
-        IDs     = np.zeros((n_i, n_j), dtype=_INT, order='C')
-        probs   = np.zeros((n_i, n_j, X.shape[1]), _FLOAT, order='C')
-        
-        log.debug("Calling get_IDs_and_probs_from_X from C")
-        platerecipy_clib_segmentation.get_IDs_and_probs_from_X(
-            X.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_int32(X.shape[0]),
-            ctypes.c_int32(X.shape[1]),
-            labels.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ord2org.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(n_i),
-            ctypes.c_int32(n_j),
-            ctypes.c_int32(num_labelled),
-            IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            probs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        ) 
-
-        # constructing the composite probability field
-        full_probs      = probs
-        i_max, j_max, _ = full_probs.shape
-        probs           = np.zeros((i_max, j_max), dtype=_FLOAT, order='C')
+        for i in range(i_max):
+            prob_vec    = probs[i, :]
+            ID_probs[i] = prob_vec[np.argmax(prob_vec)]
+    
+    elif len(probs.shape) == 3:
+        # two-dimensional data
+        i_max, j_max, _ = probs.shape
+        ID_probs = np.zeros((i_max, j_max), dtype=_FLOAT, order='C')
 
         for i in range(i_max):
             for j in range(j_max):
-                prob_vec        = full_probs[i, j, :]
-                probs[i, j]     = prob_vec[np.argmax(prob_vec)]
+                prob_vec    = probs[i, j, :]
+                ID_probs[i, j] = prob_vec[np.argmax(prob_vec)]
     
     else:
-        raise ValueError('Grid type not recognized. Valid options are "flat", "sph", or "psph".')
+        log.error("Unrecognized probability strucutre.")
+        raise ValueError("Unrecognized probability strucutre.")
 
-    return IDs, probs
+    if isinstance(grid, SphericalGrid):
+        grid.enforce_data_consistency(IDs)
+        grid.enforce_data_consistency(ID_probs)
+    
+    return IDs, ID_probs
+

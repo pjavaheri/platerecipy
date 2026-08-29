@@ -32,6 +32,7 @@ nav:
   - User Guide: 
     - Basic Usage: user_guide/basic_usage.md
     - Detailed Example: user_guide/detailed_example.md
+    - vtu Imports and Irregular Grids: user_guide/vtu_import.md
   - How to cite: cite.md
   - API:
     - grid: api/grid.md

@@ -17,80 +17,36 @@ import logging
 log = logging.getLogger(__name__)
 
 import numpy as np
-from scipy import ndimage
+from scipy.spatial import cKDTree
 
-from .transform import gridded_fused_distance_threshold_transform, \
-                        pgridded_fused_distance_threshold_transform
+from .transform import label_markers, distance_transform
 from .segmentation import random_walker
-from .grid import Grid, PartialSphericalGrid, SphericalGrid
+from .grid import Grid
 from . import _FLOAT
 
 
-def _unify_wraparound_labels(labels: np.ndarray) -> np.ndarray:
-    """
-    Ensures marker labels conform to the azimuthal continuity (i.e., wraparound
-    boundary condition).
+def _dict_arg_max(d):
+    keys = list(d.keys())
+    maxval = d[keys[0]]
+    maxkey = int(keys[0])
+    for key in keys:
+        if d[key] > maxval:
+            maxkey = int(key)
+    return maxkey
 
-    Parameters
-    ----------
-    labels : np.ndarray,
-        A 2D integer array with labels positive integers and unmarked regions 
-        zeros.
+def _get_pointwise_omega(grid: Grid, velocity_key: str):
+    omega_hat = np.cross(grid.mesh.points, grid.mesh[velocity_key])
+    omega_norm = np.linalg.norm(omega_hat, axis=1)
+    omega_hat /= omega_norm[:, None]
+    omega_mag = np.linalg.norm(grid.mesh[velocity_key], axis=1)/grid.r
+    return omega_mag, omega_hat
 
-    Returns
-    -------
-    np.ndarray
-
-    Warning
-    -------
-    The input array, `labels`, will be modified, but the modification is not 
-    guaranteed to be sequential. `_make_labels_sequential()` should be called 
-    subsequently.
-
-    Warning
-    -------
-    It is assumed that the first dimension corresponds to theta (polar angle) 
-    and the second to phi (azimuthal angle).
-    """
-    for i in range(labels.shape[0]):
-        if labels[i, 0] > 0 and labels[i, -1] > 0:
-            labels[labels == labels[i, -1]] = labels[i, 0]
-    
-    return labels
-
-def _make_labels_sequential(labels: np.ndarray) -> np.ndarray:
-    """
-    Ensures marker labels are sequential and no gaps between positive IDs.
-
-    Parameters
-    ----------
-    labels : np.ndarray,
-        A 2D integer array with labels positive integers and unmarked regions 
-        zeros.
-
-    Returns
-    -------
-    np.ndarray
-
-    Warning
-    -------
-    The input array, `labels`, will be modified, but the modification is not 
-    guaranteed to be sequential. `_make_labels_sequential()` should be called 
-    subsequently.
-    
-    Warning
-    -------
-    It is assumed that the first dimension corresponds to theta (polar angle) 
-    and the second to phi (azimuthal angle).
-    """
-    unique_labels = np.unique(labels)
-    unique_labels = unique_labels[unique_labels != 0]
-    
-    for i in range(unique_labels.size):
-        labels[labels==unique_labels[i]] = i+1
-    
-    return labels
-
+def _evolve_model(grid: Grid, omega_mag: np.ndarray, omega_hat: np.ndarray, dt: float):
+    angle = omega_mag*dt
+    new_pos = grid.mesh.points * (np.cos(angle)[:, None]) \
+            + np.cross(omega_hat, grid.mesh.points)*(np.sin(angle)[:, None]) \
+            + omega_hat * ((np.vecdot(omega_hat, grid.mesh.points)*(1-np.cos(angle)))[:, None])
+    return new_pos
 
 
 class PlateModel(object):
@@ -113,19 +69,10 @@ class PlateModel(object):
         self._stacked_field_is_normalized = False
 
         self.grid = grid
-        # if a spherical grid, wraparound azimuthally 
-        self._wraparound_azimuthally = isinstance(grid, SphericalGrid)
-        self._use_spherical_distance = isinstance(grid, PartialSphericalGrid)
-    
-    @property
-    def wraparound_azimuthally(self):
-        '''Whether to apply wraparound boundary conditions along phi (i.e., for a SphericalGrid).'''
-        return self._wraparound_azimuthally
 
-    @property
-    def use_spherical_distance(self):
-        '''Whether to apply use the great circle angle of separation instead of planar distance transform (i.e., for a SphericalGrid).'''
-        return self._use_spherical_distance
+        self.frwd_prop_IDs = None
+        self.bkwd_prop_IDs = None
+
     
     def clear_stacked_field(self) -> None:
         """
@@ -203,19 +150,19 @@ class PlateModel(object):
     
     def find_plates(
         self,
-        boundary_quantile       = 0.9,
-        boundary_absolute       = 1.0,
-        separation_tolerance    = None,
-        num_threads             = 1,
-        min_marker_size         = None,
-        preserve_small_markers  = False,
-        manual_markers          = None,
-        identify_nonconforming  = False,
-        RW_beta                 = 100.,
-        RW_solver_tolerance     = 1e-3,
-        RW_solver               = 'LU',
-        return_IDs              = True
-    ) -> np.ndarray:
+        boundary_quantile       : float = 0.9,
+        boundary_absolute       : float = 1.0,
+        separation_tolerance    : float | None = None,
+        num_threads             : int = 1,
+        min_marker_size         : int | None = None,
+        preserve_small_markers  : bool = False,
+        manual_markers          : np.ndarray | None = None,
+        identify_nonconforming  : bool = False,
+        RW_beta                 : float = 100.,
+        RW_solver_tolerance     : float = 1e-3,
+        RW_solver               : str = 'LU',
+        return_IDs              : bool = True
+    ) -> np.ndarray | None:
         """
         Applies segmentation on `stacked_field` and returns an integer array of 
         the same shape with each cell carrying the plate ID (i.e., segment
@@ -304,25 +251,29 @@ class PlateModel(object):
         
         if manual_markers is not None:
             self.markers = manual_markers
-        
         else:
 
             self.boundary_quantile_value = np.quantile(
                 self.stacked_field, 
                 [boundary_quantile]
-            )
+            )[0]
 
             self.boundary_absolute = boundary_absolute
 
+            self.boundary_threshold = np.min([self.boundary_absolute, self.boundary_quantile_value])
+
             # operating on a separate copy
-            self.stacked_field_for_segmentation = self.stacked_field.copy()
+            #self.stacked_field_for_segmentation = self.stacked_field.copy()
             
-            self.markers = (self.stacked_field_for_segmentation < self.boundary_quantile_value) \
-                & (self.stacked_field_for_segmentation < self.boundary_absolute)
+            self.markers = (self.stacked_field < self.boundary_threshold)
             
             # filtering out micro markers
             if min_marker_size is not None:
+                log.info(f"Filtering marker pataches comprised of fewer than {min_marker_size} nodes ...")
+                """
                 temp_labels = ndimage.label(self.markers)[0]
+                """
+                temp_labels = label_markers(self.grid, self.markers)
 
                 # removing labels that have non-empty intersections
                 temp_unique_labels = np.unique(temp_labels)
@@ -333,70 +284,37 @@ class PlateModel(object):
                 
                 del temp_labels, temp_unique_labels
             
-            if preserve_small_markers:
-                temp_pre_labels = ndimage.label(self.markers)[0]
-                if self.wraparound_azimuthally:
-                    _unify_wraparound_labels(temp_pre_labels)
-            
             if separation_tolerance is not None:
-                if self.use_spherical_distance and self.wraparound_azimuthally:
-                    # full sphere
-                    # separation_tolerance is treated as radians on the great-circle
-                    self.markers = ~gridded_fused_distance_threshold_transform(
-                        xs          = self.grid.xs, 
-                        ys          = self.grid.ys, 
-                        zs          = self.grid.zs,
-                        arr         = ~self.markers, 
-                        R           = self.grid.r,
-                        threshold   = separation_tolerance,
-                        num_threads = num_threads
-                    )
-                elif self.use_spherical_distance:
-                    # a partial sphere
-                    self.markers = ~pgridded_fused_distance_threshold_transform(
-                        xs          = self.grid.xs, 
-                        ys          = self.grid.ys, 
-                        zs          = self.grid.zs,
-                        theta_range = self.grid.theta_range,
-                        phi_range   = self.grid.phi_range,
-                        arr         = ~self.markers, 
-                        R           = self.grid.r,
-                        threshold   = separation_tolerance,
-                        num_threads = num_threads
-                    )
-                else: 
-                    # a flat grid
-                    pass
-                    # planar distance transform with the separation_tolerance treated 
-                    # as the distance in terms of unit grid spacing
-                    self.markers = ~(
-                        ndimage.distance_transform_edt(
-                            input=~self.markers
-                        ) < separation_tolerance
-                    )
+                log.info(f"Allowing for {separation_tolerance:5.2e} (in radians) of separation tolerance to patch missing plate boundary segments ...")
+                if preserve_small_markers:
+                    log.info(f"Preserving small markers against separation tolerance ...")
+                    temp_pre_labels = label_markers(self.grid, self.markers)
             
-            if preserve_small_markers:
-                temp_unique_labels = np.unique(temp_pre_labels)
-                temp_unique_labels = temp_unique_labels[temp_unique_labels>0]
-                
-                for label in temp_unique_labels:
-                    temp_mask = (temp_pre_labels == label)
-                    if not np.any(self.markers[temp_mask]):
-                        self.markers[temp_mask] = True
+                self.old_markers = self.markers.copy()
+                self.markers = distance_transform(
+                    grid        = self.grid, 
+                    markers     = self.markers, 
+                    threshold   = separation_tolerance, 
+                    num_threads = num_threads
+                )
+            
+                if preserve_small_markers:
+                    temp_unique_labels = np.unique(temp_pre_labels)
+                    temp_unique_labels = temp_unique_labels[temp_unique_labels>0]
+                    
+                    for label in temp_unique_labels:
+                        temp_mask = (temp_pre_labels == label)
+                        if not np.any(self.markers[temp_mask]):
+                            self.markers[temp_mask] = True
 
         # labeling the markers with positive integers
-        labels, _ = ndimage.label(self.markers)
-        
-        if self.wraparound_azimuthally:
-            # making labels consistent and sequential
-            _unify_wraparound_labels(labels)
-            _make_labels_sequential(labels)
-        
-        # handling both spherical and planar cases
+        self.labels = label_markers(self.grid, self.markers)
 
+        # handling both spherical and planar cases
+        log.info(f"Applying the Random Walker algorithm with beta={RW_beta:5.2e} ...")
         self.plate_IDs, self.ID_probs = random_walker(
-            data             = self.stacked_field_for_segmentation,
-            labels           = labels,
+            data             = self.stacked_field, #self.stacked_field_for_segmentation,
+            labels           = self.labels,
             beta             = RW_beta,
             solver_tol       = RW_solver_tolerance,
             solver           = RW_solver,
@@ -404,7 +322,7 @@ class PlateModel(object):
         )
         
         if identify_nonconforming:
-            self.plate_IDs[(self.stacked_field > 0.5) | (self.ID_probs < 0.5)] = 0
+            self.plate_IDs[(self.stacked_field > self.boundary_threshold) | (self.ID_probs < 0.5)] = 0
         
         if return_IDs:
             return self.plate_IDs.copy()

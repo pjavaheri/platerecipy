@@ -1,6 +1,7 @@
 numpy
 scipy
 matplotlib
+pyvista
 mkdocs
 mkdocs-material
 mkdocstrings[python]

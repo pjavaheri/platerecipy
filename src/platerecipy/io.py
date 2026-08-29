@@ -19,15 +19,43 @@ log = logging.getLogger(__name__)
 
 from . import _INT
 from .model import PlateModel
-from .grid import convert_grid_to_mesh, SphericalGrid
-from .legacyvtk import make_rectangular_vtk, make_spherical_vtk
+from .grid import SphericalGrid, PartialSphericalGrid, CustomGrid
 
 from scipy.io import savemat
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 
-from typing import Union, List, Tuple
+
+import pyvista as pv
+
+def save_as_vtu(
+    model               : PlateModel,
+    other_fields        = None,
+    other_fields_names  = None,
+    filename            = 'platerecipy_output.vtu'
+):
+    """
+    Assumes the existance of a mesh object.
+    """
+    if isinstance(model.grid, SphericalGrid):
+        mask = np.linspace(0, model.grid.xs.size-1, model.grid.xs.size).reshape(model.grid.xs.shape)
+        mask = (mask >= model.grid.xs.shape[1]-1)&(mask<=(model.grid.xs.shape[0]-1)*model.grid.xs.shape[1])
+    else:
+        mask = np.ones(model.grid.xs.shape, dtype=np.bool)
+
+    if other_fields is not None:
+        for i in range(len(other_fields)):
+            model.grid._mesh[
+                other_fields_names[i]
+            ] = other_fields[i][mask]
+    
+    model.grid._mesh['plate_IDs']       = model.plate_IDs[mask]
+    model.grid._mesh['ID_probs']        = model.ID_probs[mask]
+    model.grid._mesh['stacked_field']   = model.stacked_field[mask]
+    model.grid._mesh['markers']         = model.markers[mask]
+
+    model.grid._mesh.save(filename)
 
 def save_as_mat(
     model               : PlateModel,
@@ -56,9 +84,11 @@ def save_as_mat(
     data = {
         'plate_IDs'     : model.plate_IDs,
         'stacked_field' : model.stacked_field,
+        'ID_probs'      : model.ID_probs,
+        'markers'       : model.markers,
         'xs'            : model.grid.xs,
-        'xy'            : model.grid.ys,
-        'xz'            : model.grid.zs
+        'ys'            : model.grid.ys,
+        'zs'            : model.grid.zs
     }
 
     if other_fields is not None:
@@ -74,65 +104,6 @@ def save_as_mat(
         do_compression      = False,
         oned_as             = 'row',
     )
-
-def save_as_vtk(
-    model               : PlateModel,
-    other_fields        = None,
-    other_fields_names  = None,
-    filename            = 'platerecipy_output.vtk'
-):
-    """
-    To save the interpolated model as VTK ParaView-readable file.
-
-    Parameters
-    ----------
-    model : PlateModel,
-        An input model whose plates are identified.
-
-    other_fields : list, optional,
-        A list of additional fields to be included in the output.
-
-    other_fields_names : list, optional,
-        A list of field identifiers corresponding to `other_fields`.
-    
-    filename : str, default='platerecipy_output.vtk'
-        Output filename.
-    
-    Returns
-    -------
-    `None`
-    """
-    if other_fields is not None:
-        other_fields.append(model.plate_IDs)
-        other_fields.append(model.ID_probs)
-        other_fields.append(model.stacked_field)
-        other_fields_names.append('plate_IDs')
-        other_fields_names.append('ID_probs')
-        other_fields_names.append('stacked_field')
-    else:
-        other_fields = [model.plate_IDs, model.ID_probs, model.stacked_field]
-        other_fields_names = ['plate_IDs', 'ID_probs', 'stacked_field']
-
-    if isinstance(model.grid, SphericalGrid):
-        make_spherical_vtk(
-            fname       = filename,
-            xs          = model.grid.xs,
-            ys          = model.grid.ys,
-            zs          = model.grid.zs,
-            fields      = other_fields,
-            field_names = other_fields_names
-        )
-    else:
-        make_rectangular_vtk(
-            fname       = filename,
-            xs          = model.grid.xs,
-            ys          = model.grid.ys,
-            zs          = model.grid.zs,
-            fields      = other_fields,
-            field_names = other_fields_names
-        )
-
-
 
 
 def save_as_csv(
@@ -162,8 +133,8 @@ def save_as_csv(
     filename : str, default='platerecipy_output.csv'
         Output filename.
     """
-    fields_to_write = [model.plate_IDs, model.stacked_field, model.ID_probs]
-    fields_names_to_write = ['plate_IDs', 'ID_probs', 'stacked_field']
+    fields_to_write = [model.plate_IDs, model.stacked_field, model.ID_probs, model.markers]
+    fields_names_to_write = ['plate_IDs', 'ID_probs', 'stacked_field', 'markers']
 
     if other_fields is not None:
         for i in range(len(other_fields)):
@@ -209,67 +180,6 @@ def save_as_csv(
 
 
 
-def save_as_vtp(
-    model               : PlateModel,
-    other_fields        = None,
-    other_fields_names  = None,
-    filename            = 'platerecipy_output.vtp',
-    return_mesh         = False
-):
-    """
-    To save the interpolated model as VTP ParaView file.
-
-    Parameters
-    ----------
-    model : PlateModel,
-        An input model whose plates are identified.
-
-    other_fields : list, optional,
-        A list of additional fields to be included in the output.
-
-    other_fields_names : list, optional,
-        A list of field identifiers corresponding to `other_fields`.
-    
-    filename : str, default='platerecipy_output.vtp'
-        Output filename.
-    
-    return_mesh : bool, default=False,
-        Whether to also return the `pyvista` mesh created.
-    
-    Returns
-    -------
-    `None` or a `pyvista` mesh
-    """
-    try:
-        import pyvista as pv
-    except ImportError:
-        raise ImportError("For VTP and six-view-plots, packages `vtk` and `pyvista` are required.")
-    
-    if other_fields is not None:
-        other_fields.append(model.plate_IDs)
-        other_fields.append(model.ID_probs)
-        other_fields.append(model.stacked_field)
-        other_fields_names.append('plate_IDs')
-        other_fields_names.append('ID_probs')
-        other_fields_names.append('stacked_field')
-        mesh = convert_grid_to_mesh(
-            gridded_fields  = other_fields,
-            field_names     = other_fields_names,
-            radius          = model.grid.r
-        )
-        mesh.save(filename)
-    else:
-        mesh = convert_grid_to_mesh(
-            gridded_fields  = [model.plate_IDs, model.ID_probs, model.stacked_field],
-            field_names     = ['plate_IDs', 'ID_probs', 'stacked_field'],
-            radius          = model.grid.r
-        )
-        mesh.save(filename)
-    if return_mesh:
-        return mesh
-
-
-
 def save_mollweide_projection(
     model       : PlateModel,
     filename    = 'platerecipy_mollweide_output.png'
@@ -287,7 +197,7 @@ def save_mollweide_projection(
     """
     
     if not isinstance(model.grid, SphericalGrid):
-        raise ValueError('Bad input. Only a spherical model can have a mollweide projection.')
+        raise ValueError('Bad input. A regular spherical grid is required for generating a mollweide projection.')
 
     with plt.rc_context({
         'mathtext.fontset'  : 'stix', 
@@ -369,21 +279,25 @@ def save_six_view_angles(
     filename : str, default='platerecipy_six_angle_output.png'
         Output filename.
     """
-    try:
-        import pyvista as pv
-    except ImportError:
-        raise ImportError("For VTP and six-view-plots, packages `vtk` and `pyvista` are required.")
-    
-    if not isinstance(model.grid, SphericalGrid):
-        raise ValueError('Bad input. Only a spherical model can have six angle view output.')
+    if type(model.grid) is PartialSphericalGrid:
+        raise ValueError('Bad input. Only a full spherical model can have six angle view output.')
+    elif isinstance(model.grid, CustomGrid):
+        log.warning("For a six view angle image, the grid must represent the entire spherical surface.")
     
     from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-    mesh = convert_grid_to_mesh(
-        gridded_fields  = [model.plate_IDs, model.ID_probs, model.stacked_field],
-        field_names     = ['plate_IDs', 'ID_probs', 'stacked_field'],
-        radius          = 1.
-    )
+
+    if isinstance(model.grid, SphericalGrid):
+        mask = np.linspace(0, model.grid.xs.size-1, model.grid.xs.size).reshape(model.grid.xs.shape)
+        mask = (mask >= model.grid.xs.shape[1]-1)&(mask<=(model.grid.xs.shape[0]-1)*model.grid.xs.shape[1])
+    else:
+        mask = np.ones(model.grid.xs.shape, dtype=np.bool)
+
+    model.grid._mesh['plate_IDs']       = model.plate_IDs[mask]
+    model.grid._mesh['ID_probs']        = model.ID_probs[mask]
+    model.grid._mesh['stacked_field']   = model.stacked_field[mask]
+
+    mesh = model.grid._mesh
 
     with plt.rc_context({
         'mathtext.fontset'  : 'stix', 
