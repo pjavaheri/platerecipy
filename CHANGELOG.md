@@ -4,6 +4,12 @@ Summary of key changes from the backend to the user interface.
 
 ## Version 2.x
 
+### Version 2.0.5
+* Fixing Github workflow issues
+
+### Version 2.0.4
+* Fixing Github workflow issues
+
 ### Version 2.0.3
 * Rewriting the backend to store nodal connections explicitly for a more robust and generalized implementation of the Random Walker algorithm
 * Using vtp files and the pyvista package for custom (irregular) spherical grids, primarily to simplify ASPECT users workflow
