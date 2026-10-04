@@ -1,3 +1,6 @@
+> [!WARNING]
+> Upcoming `platerecipy` release: direct import of irregular grids as `.vtu` files, multithreaded functionalities on Windows, and more!
+
 ![logo](https://github.com/pjavaheri/platerecipy/raw/master/logo.png)
 
 # `platerecipy`: a package for PLATE RECognition In PYthon

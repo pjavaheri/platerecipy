@@ -2,6 +2,12 @@
 
 # Welcome to `platerecipy`: a package for PLATE RECognition in PYthon!
 
+!!! warning "Stay tuned for an upcoming `platerecipy` release"
+    * Direct import of irregular grids
+    * Multithreaded functionalities on Windows
+    * Enhanced performance
+    * And more!
+
 ## Features
 
 * Reliable surface tesselation and **candidate plate detection**
