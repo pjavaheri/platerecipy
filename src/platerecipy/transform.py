@@ -92,8 +92,14 @@ def distance_transform(
     grid        : Grid,
     markers     : np.ndarray,
     threshold   : float,
-    num_threads = 1
+    num_threads = 'auto'
 )-> np.ndarray:
+    if num_threads == 'auto':
+        num_threads = min(os.cpu_count()//2, 8)
+        log.warning(f"Automatically parallelizing over {num_threads} threads.")
+    else:
+        log.warning(f"Parallelizing over {num_threads} threads.")
+
     out = np.zeros_like(markers)
 
     log.debug("Calling inverted_fused_distance_threshold_transform_on_map form C")

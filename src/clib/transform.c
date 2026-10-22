@@ -87,12 +87,12 @@ void label_markers_from_map(
     if (transform_h_logger) transform_h_logger("Assigning integer labels to connected patches ...");
 
     int max_stack_size = 0;
-    for (int i = 0; i < map->num_nodes; i++) {
-        if (markers[i]) {
+    for (int idx = 0; idx < map->num_nodes; idx++) {
+        if (markers[map->nodes[idx].npy_idx]) {
             max_stack_size++;
-            labels[i] = -1; // marked but not yet processed
+            labels[map->nodes[idx].npy_idx] = -1; // marked but not yet processed
         } else {
-            labels[i] = 0; // unmarked, so they are assigned zero
+            labels[map->nodes[idx].npy_idx] = 0; // unmarked, so they are assigned zero
         }
     }
     
@@ -309,7 +309,7 @@ void inverted_fused_distance_threshold_transform_on_map(
     
 
     // if planar, THRESHOLD_D_SQUARED should be merely (R*threshold)^2
-    if (map->grid_type == GTYPE_PLANAR) {
+    if ((map->grid_type == GTYPE_PLANAR) || (map->grid_type == GTYPE_CUSTOM_PLANAR)) {
         if (transform_h_logger) transform_h_logger("... rescaling R for the distance transform so that R*separation_tolerance == Euclidean distance");
         // we scale the local R so that the constant THRESHOLD_D_SQUARED
         // becomes what we want, instead of the great-circle distance

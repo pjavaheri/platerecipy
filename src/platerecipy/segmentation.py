@@ -262,7 +262,7 @@ def random_walker(
     labels                          : np.ndarray,
     grid                            : Grid,
     beta                            = 100.,
-    solver                          = 'direct',
+    solver                          = 'LU',
     solver_tol                      = 1e-3,
     max_beta_reduction_attempts     = 2,
     beta_reduction_fraction         = 0.9,

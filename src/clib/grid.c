@@ -79,6 +79,9 @@ void alloc_and_init_edge_lengths(
 ) {
     // a single array is shared by all the nodes
     map->nodes[0].edge_lengths = (double *) malloc(2*map->num_edges * sizeof(double));
+    for (int j = 0; j < map->nodes[0].num_neighs; j++) {
+        map->nodes[0].edge_lengths[j] = 1.;
+    }
     for (int i = 1; i < map->num_nodes; i++) {
         map->nodes[i].edge_lengths = map->nodes[i-1].edge_lengths + map->nodes[i-1].num_neighs;
         for (int j = 0; j < map->nodes[i].num_neighs; j++) {
@@ -131,7 +134,8 @@ void set_npy_idx(
 Map * alloc_map_from_cells(
     int32_t     num_nodes,
     int32_t *   cells,
-    int32_t     num_cells
+    int32_t     num_cells,
+    int32_t     grid_type
 ) {
     if (grid_h_logger) grid_h_logger("Allocating a custom map from cell/node adjacency ...");
 
@@ -139,7 +143,7 @@ Map * alloc_map_from_cells(
     map->num_nodes = num_nodes;
     map->i_max = -1;
     map->j_max = -1;
-    map->grid_type = GTYPE_CUSTOM;
+    map->grid_type = grid_type;
     map->nodes = (Node *) calloc(map->num_nodes, sizeof(Node)); 
 
     // getting an estimate on the shared array size

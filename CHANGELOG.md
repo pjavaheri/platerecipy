@@ -4,6 +4,13 @@ Summary of key changes from the backend to the user interface.
 
 ## Version 2.x
 
+### Version 2.1.0
+* Direct import of irregular grids via .vtu files
+* Automatic surface extraction of spherical shells
+* A comprehensive set of integration tests added
+* Automated GitHub workflow for running tests
+* Minor bug fixes
+
 ### Version 2.0.5
 * Fixing Github workflow issues
 

@@ -54,7 +54,7 @@ def save_as_vtu(
     model.grid._mesh['ID_probs']        = model.ID_probs[mask]
     model.grid._mesh['stacked_field']   = model.stacked_field[mask]
     model.grid._mesh['markers']         = model.markers[mask]
-
+    model.grid._mesh.set_active_scalars('plate_IDs')
     model.grid._mesh.save(filename)
 
 def save_as_mat(

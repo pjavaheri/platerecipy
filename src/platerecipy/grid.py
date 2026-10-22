@@ -46,7 +46,10 @@ platerecipy_clib_grid = ctypes.CDLL(shared_object_path)
 
 # ~~~~~~~~~~~~~~~ Grid type identifiers ~~~~~~~~~~~~~~~
 
-# Custom/unknown grid
+# Custom/unknown flat grid
+GTYPE_CUSTOM_PLANAR        = -1
+
+# Custom/unknown spherical grid
 GTYPE_CUSTOM               = -1
 
 # Flat rectilinear grid
@@ -77,6 +80,7 @@ class Map(ctypes.Structure):
         ("nodes", ctypes.POINTER(Node)),
         ("num_nodes", ctypes.c_int32),
         ("num_edges", ctypes.c_int32),
+        ("grid_type", ctypes.c_int32),
         ("i_max", ctypes.c_int32),
         ("j_max", ctypes.c_int32),
     ]
@@ -110,6 +114,7 @@ platerecipy_clib_grid.set_npy_idx.restype = None
 platerecipy_clib_grid.alloc_map_from_cells.argtypes = [
     ctypes.c_int32,
     ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_int32,
     ctypes.c_int32
 ]
 platerecipy_clib_grid.alloc_map_from_cells.restype = ctypes.POINTER(Map)
@@ -238,6 +243,7 @@ class CustomGrid(Grid):
     def __init__(
         self,
         surface_vtu_adr: str | Path,
+        extract_spherical_surface = False,
     ):
         log.debug('Generating a CustomGrid from input ...')
         Grid.__init__(self)
@@ -246,22 +252,54 @@ class CustomGrid(Grid):
         if not vtu_path.is_file():
             raise FileNotFoundError(f'{vtu_path} not found.')
         
-        mesh: pv.UnstructuredGrid = pv.read(vtu_path)
+        if extract_spherical_surface:
+            # the input vtu file contains the entire volume
+            log.warning('Automatically extracting the outer surface of the spherical shell ...')
+            whole_sph_mesh = pv.read(vtu_path)
+            surface_extract = whole_sph_mesh.extract_surface(algorithm=None)
+            connectivity  = surface_extract.connectivity()
+            region_IDs = np.unique(connectivity["RegionId"])
+            radius = -1
+            for region_ID in region_IDs:
+                region = connectivity.threshold(
+                    [region_ID, region_ID],
+                    scalars = "RegionId"
+                )
+                # allowing for the full spherical volume to be off-centred
+                centre = region.points.mean(axis = 0)
+                region_radius = (np.linalg.norm(region.points - centre, axis=1)).mean()
+                if region_radius > radius:
+                    # found a surface that wraps the previous stored region
+                    radius = region_radius
+                    mesh = region
+            log.warning('... spherical surface extracted.')
+        else:
+            mesh: pv.UnstructuredGrid = pv.read(vtu_path)
+            # assuming the surface is centred:
+            # checking to see if planar
+            distances_from_origin = np.linalg.norm(mesh.points, axis=1)
+            self.is_planar = distances_from_origin.std()/distances_from_origin.mean() > 1e-6
+
 
         self._mesh = mesh
         all_cells = mesh.cells.astype(_INT)
         
+        log.debug("Calling alloc_map_from_cells from C")
         self._map = platerecipy_clib_grid.alloc_map_from_cells(
             ctypes.c_int32(mesh.number_of_points),
             all_cells.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(mesh.cells.size)
+            ctypes.c_int32(mesh.cells.size),
+            GTYPE_CUSTOM_PLANAR if self.is_planar else GTYPE_CUSTOM
         )
 
         self._xs = mesh.points[:, 0].astype(_FLOAT)
         self._ys = mesh.points[:, 1].astype(_FLOAT)
         self._zs = mesh.points[:, 2].astype(_FLOAT)
 
-        # assuming that it's spherical; otherwise it would be used for normalizing distances
+        # _r is the radius assuming that it's spherical; 
+        # otherwise it would be used for normalizing distances.
+        # To allow for partial spherical structures, we assume (if spherical) the grid is 
+        # centred at (0, 0, 0).
         self._r = np.sqrt(self._xs**2 + self._ys**2 + self._zs**2).mean()
 
         # assigning indices 
@@ -271,6 +309,143 @@ class CustomGrid(Grid):
             self._map,
             npy_idxs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
         )
+
+        if self.is_planar:
+            log.debug("Calling set_cartesian_edge_length from C")
+            platerecipy_clib_grid.set_cartesian_edge_length(
+                self._map,
+                self._xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                self._ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                self._zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                ctypes.c_double(self._r)
+            )
+        else:
+            log.debug("Calling set_spherical_edge_length from C")
+            platerecipy_clib_grid.set_spherical_edge_length(
+                self._map,
+                self._xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                self._ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                self._zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                ctypes.c_double(self._r)
+            )
+
+        log.debug('... grid created.')
+
+
+
+class PlanarGrid(Grid):
+    """
+    Flat uniform rectilinear grid.
+    """
+
+    def __init__(
+        self,
+        original_xs  : np.ndarray,
+        original_ys  : np.ndarray,
+        x_range      : tuple[float, float],
+        y_range      : tuple[float, float],
+        x_res        : int | None = None,
+        y_res        : int | None = None,    
+    ):
+        """
+        Constructs a flat uniform rectilinear grid structure, spanning  
+        [`x_range[0]`,`x_range[1]`] x [`y_range[0]`, `y_range[1]`].
+        
+
+        Warning
+        -------
+        The Cartesian arguments will be the basis upon which the class method
+        `interpolate_field()` operates. Inconsistent values will impact the 
+        interpolation process.
+
+
+        Parameters
+        ----------
+        original_xs : np.ndarray
+            array of original input Cartesian x coordinates.
+
+        original_ys : np.ndarray
+            array of original input Cartesian y coordinates.
+        
+        x_range : tuple
+            range along the x-axis.
+        
+        y_range : tuple
+            range along the y-axis.
+        
+        x_res : int, optional
+            resolution along the x-axis. 
+
+        y_res : int, optional
+            resolution along the y-axis.
+        """
+        log.debug('Generating a PlanarGrid ...')
+
+        Grid.__init__(self)
+        self._r = None 
+        ## the order is x and y
+
+        self.original_xs = original_xs.astype(dtype=_FLOAT, order='C', copy=False)
+        self.original_ys = original_ys.astype(dtype=_FLOAT, order='C', copy=False)
+        self.original_zs = np.zeros_like(self.original_xs)
+
+        self._x_range = x_range
+        self._y_range = y_range
+
+        range_ratio = (x_range[1]-x_range[0])/(y_range[1]-y_range[0])
+
+        if x_res is None:
+            x_res = int(np.sqrt(range_ratio * self.original_xs.size))
+        
+        if y_res is None:
+            y_res = int(np.sqrt(self.original_xs.size / range_ratio))
+        
+        self._x_res = x_res
+        self._y_res = y_res
+
+        self._xs, self._ys = np.meshgrid(
+            np.linspace(
+                self._x_range[0], 
+                self._x_range[1], 
+                self._x_res, dtype=_FLOAT
+            ),
+            np.linspace(
+                self._y_range[0], 
+                self._y_range[1], 
+                self._y_res, dtype=_FLOAT
+            ),
+            indexing='ij'
+        )
+        self._zs = np.zeros_like(self._xs)
+
+        # a mere scaling constant
+        self._r = np.sqrt(self._xs**2 + self._ys**2 + self._zs**2).mean()
+
+        # generating a simple rectangular grid
+        log.debug("Calling alloc_rect_map from C")
+        self._map = platerecipy_clib_grid.alloc_rect_map(
+            ctypes.c_int32(self._x_res),
+            ctypes.c_int32(self._y_res),
+            ctypes.c_int32(GTYPE_PLANAR)
+        )
+        # assigning indices 
+        npy_idxs = np.linspace(0, self._xs.size-1, self._xs.size, dtype=_INT)
+        log.debug("Calling set_npy_idx from C")
+        platerecipy_clib_grid.set_npy_idx(
+            self._map,
+            npy_idxs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        )
+
+        # generating a pyvista mesh
+        points = np.vstack([self._xs.ravel(), self._ys.ravel(), self._zs.ravel()]).T
+        cells = np.zeros(5*(x_res-1)*(y_res-1), dtype=_INT)
+        log.debug("Calling gen_cells_from_map from C")
+        platerecipy_clib_grid.gen_cells_from_map(
+            self._map, 
+            cells.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        )
+        cell_types = np.array([pv.CellType.QUAD for _ in range((x_res-1)*(y_res-1))])
+        self._mesh = pv.UnstructuredGrid(cells, cell_types, points)
 
         log.debug("Calling set_cartesian_edge_length from C")
         platerecipy_clib_grid.set_cartesian_edge_length(
@@ -283,7 +458,134 @@ class CustomGrid(Grid):
 
         log.debug('... grid created.')
 
+    
+    def interpolate_field(
+        self,
+        field           : np.ndarray,
+        take_log        = False,
+        **method_kwargs
+    ) -> np.ndarray:
+        """
+        Interpolates the input field to the grid objects nodes.
 
+        Parameters
+        ----------
+        field : np.ndarray
+            array corresponding to the original Cartesian coordinate inputs.
+        
+        take_log : bool, False
+            whether to perform the interpolation on the log space (suitable for
+            fields that vary by orders of magnitude), default = False.
+        
+        method_kwargs : dict, optional
+            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
+            and `near_thresh`.
+
+        
+        Returns
+        -------
+        np.ndarray
+        """
+        log.debug('Interpolating the data to a uniform planar grid ...')
+
+
+        field = field.ravel().astype(dtype=_FLOAT, order='C', copy=False)
+
+        # checking if interpolation needs to occur on the log space
+        if take_log:
+            field = np.log(field)
+
+        # this will leave the boundary (out of the convex hull) as NaNs
+        grid_linear = griddata(
+            (self.original_xs, self.original_ys), 
+            field, 
+            (self._xs, self._ys), 
+            method='linear'
+        )
+
+        # replacing NaNs with closest values
+        grid_nearest = griddata(
+            (self.original_xs, self.original_ys), 
+            field, 
+            (self._xs, self._ys), 
+            method='nearest'
+        )
+
+        grid_linear[np.isnan(grid_linear)] = grid_nearest[np.isnan(grid_linear)]
+
+        # returning to original space
+        if take_log:
+            gridded_field = np.exp(grid_linear).astype(dtype=_FLOAT, order='C', copy=False)
+        else:
+            gridded_field = grid_linear.astype(dtype=_FLOAT, order='C', copy=False)
+        
+        log.debug('... interpolation done.')
+        return gridded_field
+    
+
+    def map_to_original_input(
+        self,
+        field       : np.ndarray,
+        take_log    = False,
+        **method_kwargs
+    ) -> np.ndarray:
+        """
+        Maps the gridded field back to the original input format by interpolating 
+        the nodes using the nearest method.
+
+        Parameters
+        ----------
+        field : np.ndarray,
+            array corresponding to the original Cartesian coordinate inputs.
+
+        take_log : bool, False,
+            whether to perform the interpolation on the log space (suitable for
+            fields that vary by orders of magnitude), default = False.
+        
+        method_kwargs : dict, optional
+            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
+            and `near_thresh`.
+        
+        
+        Returns
+        -------
+        np.ndarray
+        """
+        log.debug('Interpolating fields back to the original input array')
+
+        field = field.ravel()
+
+        # checking if interpolation needs to occur on the log space
+        if take_log:
+            field = np.log(field)
+
+        # by default the nearest method is used for the points
+        # outside the convex hull and an integer field (e.g., plate ID)
+        org_nearest = griddata(
+            (self._xs.ravel(), self._ys.ravel()),
+            field.ravel(),  
+            (self.original_xs, self.original_ys), 
+            method='nearest'
+        )
+
+        if field.dtype == _INT:
+            org_order = org_nearest.astype(_INT)
+        else:
+            # a float field will be interpolated linearly within
+            # the convex hull
+            org_linear = griddata(
+                (self._xs.ravel(), self._ys.ravel()),
+                field.ravel(),  
+                (self.original_xs, self.original_ys), 
+                method='linear'
+            )
+            org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
+            org_order = org_linear
+        
+        if take_log:
+            org_order = np.exp(org_order)
+
+        return org_order  
 
 
 class PartialSphericalGrid(Grid):
@@ -312,7 +614,7 @@ class PartialSphericalGrid(Grid):
         Warning
         -------
         The Cartesian arguments will be the basis upon which the class method
-        `interpolate_field()` operates. In consistent values will impact the 
+        `interpolate_field()` operates. Inconsistent values will impact the 
         interpolation process.
 
         Warning
@@ -421,6 +723,15 @@ class PartialSphericalGrid(Grid):
         platerecipy_clib_grid.set_npy_idx(
             self._map,
             npy_idxs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        )
+
+        log.debug("Calling set_spherical_edge_length from C")
+        platerecipy_clib_grid.set_spherical_edge_length(
+            self._map,
+            self._xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            self._ys.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            self._zs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            ctypes.c_double(self._r)
         )
 
         # generating a pyvista mesh
@@ -622,16 +933,18 @@ class PartialSphericalGrid(Grid):
         # forcing boundary conditions by averaging
         if np.abs(self.theta_range[0]) < 1e-3:
             # if close to the north pole
-            grid_linear[ 0,  :] = np.mean(grid_linear[:,  0])
+            ##grid_linear[ 0,  :] = np.mean(grid_linear[:,  0])
+            pass
         if np.abs(self.theta_range[1] - np.pi) < 1e-3:
             # if close to the south pole
-            grid_linear[-1,  :] = np.mean(grid_linear[:, -1])
+            ##grid_linear[-1,  :] = np.mean(grid_linear[:, -1])
+            pass
         if (np.abs(-np.pi - self.phi_range[0]) < 1e-3) \
             and (np.abs(np.pi - self.phi_range[1]) < 1e-3):
             # if azimuthal endpoints are too close to each other
             # this should not happen
-            grid_linear[ :,  0] = 0.5 * (grid_linear[:, 0] + grid_linear[:, -1])
-            grid_linear[ :, -1] = grid_linear[:, 0]
+            ##grid_linear[ :,  0] = 0.5 * (grid_linear[:, 0] + grid_linear[:, -1])
+            ##grid_linear[ :, -1] = grid_linear[:, 0]
             log.warning('Azimuthal end points are too close to each other. Please use a full spherical representation instead.')
         
         # returning to original space
@@ -939,6 +1252,7 @@ class SphericalGrid(PartialSphericalGrid):
             npy_idxs.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
         )
         
+        log.debug("Calling set_spherical_edge_length from C")
         platerecipy_clib_grid.set_spherical_edge_length(
             self._map,
             self._xs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),

@@ -34,7 +34,10 @@ CLIB_EXPORT void set_grid_h_logger(grid_h_log_func func);
 
 // ~~~~~~~~~~~~~~~ Grid type identifiers ~~~~~~~~~~~~~~~
 
-// Custom/unknown grid
+// Custom/unknown flat grid
+const int32_t GTYPE_CUSTOM_PLANAR        = -2;
+
+// Custom/unknown spherical grid
 const int32_t GTYPE_CUSTOM               = -1;
 
 // Flat rectilinear grid
@@ -130,11 +133,13 @@ CLIB_EXPORT void set_npy_idx(
  * @param num_nodes number of nodes in the mesh (also one greater than the largest node id)
  * @param cells a pointer to the cells array
  * @param num_cells lengths of the cells array (and not the number of cells)
+ * @param grid_type type of custom grid (i.e., if planar)
  */
 CLIB_EXPORT Map * alloc_map_from_cells(
     int32_t     num_nodes,
     int32_t *   cells,
-    int32_t     num_cells
+    int32_t     num_cells,
+    int32_t     grid_type
 );
 
 

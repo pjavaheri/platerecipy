@@ -153,7 +153,7 @@ class PlateModel(object):
         boundary_quantile       : float = 0.9,
         boundary_absolute       : float = 1.0,
         separation_tolerance    : float | None = None,
-        num_threads             : int = 1,
+        num_threads             : int | str = 'auto',
         min_marker_size         : int | None = None,
         preserve_small_markers  : bool = False,
         manual_markers          : np.ndarray | None = None,
@@ -205,8 +205,9 @@ class PlateModel(object):
             `separation_tolerance` will be considered as the angle of tolerance 
             on the great circle passing through a given pair of points in radians.
 
-        num_threads : int, default=1
+        num_threads : int, default='auto'
             Number of threads to use to perform the spherical distance transform.
+            If 'auto', equals to the half of the available CPUs (capped at 8).
         
         min_marker_size : int, optional
             If provided, watershed markers will be filtered such that markers 
@@ -270,9 +271,6 @@ class PlateModel(object):
             # filtering out micro markers
             if min_marker_size is not None:
                 log.info(f"Filtering marker pataches comprised of fewer than {min_marker_size} nodes ...")
-                """
-                temp_labels = ndimage.label(self.markers)[0]
-                """
                 temp_labels = label_markers(self.grid, self.markers)
 
                 # removing labels that have non-empty intersections

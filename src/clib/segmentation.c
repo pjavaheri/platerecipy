@@ -124,14 +124,9 @@ void get_ordered_boundary_matrix_from_map(
     for (int i = 0; i < map->num_nodes; i++) {
         const int label_i = labels[map->nodes[i].npy_idx];
         const int ord_idx = map->nodes[i].ord_idx;
-        if (label_i > 0) {
-            if (ord_idx >= num_labelled) {
-                segmentation_h_logger("Something bad has happned 294");
-            }         
+        if (label_i > 0) {       
             for (int s = 0; s < largest_label; s++) {
-                if (label_i == s+1) {
-                    M[ord_idx*largest_label + s] = 1.;
-                }
+                M[ord_idx*largest_label + s] = (double) (label_i == s+1);
             }
         }
     }
