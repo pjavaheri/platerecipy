@@ -83,7 +83,7 @@ def label_markers(
     )
 
     if isinstance(grid, SphericalGrid):
-        grid.enforce_data_consistency(labels)
+        grid._enforce_data_consistency(labels)
 
     return labels
 
@@ -116,7 +116,7 @@ def distance_transform(
     )
 
     if isinstance(grid, SphericalGrid):
-        grid.enforce_data_consistency(out)
+        grid._enforce_data_consistency(out)
 
     return out
 

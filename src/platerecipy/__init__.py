@@ -40,3 +40,11 @@ _FLOAT   = float64
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import sys
 _IS_WINDOWS = (sys.platform == 'win32')
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~ embedding version info ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("platerecipy")
+except PackageNotFoundError:
+    __version__ = "unknown"

@@ -1,12 +1,9 @@
-> [!WARNING]
-> Upcoming `platerecipy` release: direct import of irregular grids as `.vtu` files, multithreaded functionalities on Windows, and more!
-
 ![Version](https://img.shields.io/github/v/tag/pjavaheri/platerecipy?label=Version&color=blueviolet)
 [![Version](https://img.shields.io/github/v/tag/pjavaheri/platerecipy?label=PyPI&color=red)](https://pypi.org/project/platerecipy/)
 [![https://img.shields.io/badge/License-MIT-yellow.svg](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pjavaheri/platerecipy/blob/master/LICENSE)
 [![Documentation](https://img.shields.io/badge/Documentation-readthedocs-blue.svg)](https://platerecipy.readthedocs.io/)
 ![Integration Tests](https://img.shields.io/github/actions/workflow/status/pjavaheri/platerecipy/tests.yml?branch=master&label=Integration%20Tests)
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15625715.svg)](https://doi.org/10.5281/zenodo.15625715)
 
 ![logo](https://github.com/pjavaheri/platerecipy/raw/master/logo.png)
 
@@ -17,10 +14,8 @@ as well as regions with low confidence in plate assignment.
 
 ## Supported platforms
 
-Though `platerecipy` is fundamentally a `Python` package, it also relies on 
-backend functionalities that are implemented in `C`. **Linux** is the main operating 
-system for `platerecipy`. However, expect for a number of optimizations (e.g., multithreaded `C` functions), 
-`platerecipy` is now available via `pip` on Windows systems.
+`platerecipy` is now fully available on Linux, Windows, and MacOS. Yet, Linux remains 
+the main operating system for testing and official support due to a number of backend functionalities implemented in `C`. 
 
 ## Installation
 
@@ -30,19 +25,22 @@ Version releases are made available on PyPI so that `platerecipy` can be install
 pip install platerecipy
 ```
 
-## User guide
+## Quick start
 
 `platerecipy`'s documentation is moved to [platerecipy.readthedocs.io](https://platerecipy.readthedocs.io/)!
 
-For a detailed explanation and illustration of `platerecipy`'s core functionalities,
+For a detailed explanation of `platerecipy`'s core methodology,
 please refer to:
 > Javaheri, P., & Lowman, J. P. (2026). A random walker algorithm for plate boundary detection in spherical mantle convection models and global geophysical data sets: Application to Euler vector determination. _Journal of Geophysical Research: Solid Earth_, 131, e2025JB032259. https://doi.org/10.1029/2025JB032259
 
+**`platerecipy` is capable of operating on both ungridded (e.g., geophysical measurments) and gridded (e.g., geodynamic model output) data sets. Ungridded data are automatically interpolated to a grid of choice, while for a gridded input, plate detection takes places directly on the input grid struture.**
+
+### Ungridded data
 As a demonstration, assuming a given `input_xs`, `input_ys`, `input_zs`, and  
 `input_field` (all `numpy` arrays), using `platerecipy` is as simple as follows:
 ```python
-from platerecipy.model import PlateModel
 from platerecipy.grid import SphericalGrid
+from platerecipy.model import PlateModel
 
 input_xs    = # to be specified ...
 input_ys    = # to be specified ...
@@ -69,12 +67,36 @@ m.find_plates(
     min_marker_size       = 100             # to filter out micro plates
 )
 
-# outputting as a ParaView readable .vtk file
-from platerecipy import io
-io.save_as_vtk(m)
+m.plate_IDs   # --> the array of plate IDs
+m.ID_probs    # --> the array of ID probabilities
 ```
 
-# Citing `platerecipy`
+### Gridded data
+If the input data set is already gridded (such as model output), the grid can be directly imported
+to bypass interpolation, thus increasing processing speed and accuracy. To do so, the data set must 
+be contained in a `.vtu` file and read using the `CustomGrid` object as follows:
+
+```python
+from platerecipy.grid import CustomGrid
+from platerecipy.model import PlateModel
+
+grid = CustomGrid("dataset.vtu")
+
+# initializing a plate model
+m = PlateModel(grid)
+
+# stacking a sample field (must be present in the same vtu file)
+m.stack_field(grid.mesh["Strain-rate"], take_log=True)
+
+# finding plates on the stacked field
+m.find_plates(
+  ...
+)
+```
+
+
+
+## Citing `platerecipy`
 If this package has been useful to your research, please cite the original paper:
 
 > Javaheri, P., & Lowman, J. P. (2026). A random walker algorithm for plate boundary detection in spherical mantle convection models and global geophysical data sets: Application to Euler vector determination. _Journal of Geophysical Research: Solid Earth_, 131, e2025JB032259. https://doi.org/10.1029/2025JB032259
@@ -95,24 +117,9 @@ year = {2026}
 }
 ```
 
-as well as the software version:
->P. Javaheri. (2025). pjavaheri/platerecipy: Release of version 1.0.0 (v1.0.0). _Zenodo_. https://doi.org/10.5281/zenodo.15625716
-```
-@software{p_javaheri_2025_15625716,
-  author       = {P. Javaheri},
-  title        = {pjavaheri/platerecipy: Release of version 1.0.0},
-  month        = jun,
-  year         = 2025,
-  publisher    = {Zenodo},
-  version      = {v1.0.0},
-  doi          = {10.5281/zenodo.15625716},
-  url          = {https://doi.org/10.5281/zenodo.15625716},
-}
-``` 
+as well as the appropriate software version DOI released on `Zenodo`: 
 
-Please note that `platerecipy` is a platform under development. Depending on your installed 
-version, the software version citation should point to the most recent prior
-release on Zenodo.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15625715.svg)](https://doi.org/10.5281/zenodo.15625715)
 
 --------------------------------------------------------------------------------
 

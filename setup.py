@@ -1,3 +1,9 @@
+"""
+@file setup.py
+@author Pejvak Javaheri; pejvak.javaheri@mail.utoronto.ca
+@brief Package setup script.
+"""
+
 from setuptools import setup, Extension, find_packages
 import os           # for PyPI long description 
 import sys          # for platform
@@ -79,7 +85,7 @@ with open(
 
 setup(
     name                            = 'platerecipy',
-    version                         = '2.1.0',
+    version                         = '2.2.0',
     description                     = 'PLATE RECognition In PYthon',
     long_description                = long_description,
     long_description_content_type   = 'text/markdown',

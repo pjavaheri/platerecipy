@@ -21,21 +21,11 @@ year = {2026}
 }
 ```
 
-as well as the software version:
->P. Javaheri. (2025). pjavaheri/platerecipy: Release of version 1.0.0 (v1.0.0). _Zenodo_. https://doi.org/10.5281/zenodo.15625716
-```
-@software{p_javaheri_2025_15625716,
-  author       = {P. Javaheri},
-  title        = {pjavaheri/platerecipy: Release of version 1.0.0},
-  month        = jun,
-  year         = 2025,
-  publisher    = {Zenodo},
-  version      = {v1.0.0},
-  doi          = {10.5281/zenodo.15625716},
-  url          = {https://doi.org/10.5281/zenodo.15625716},
-}
-``` 
+as well as the appropriate software version DOI released on `Zenodo`: 
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15625715.svg)](https://doi.org/10.5281/zenodo.15625715)
+
 !!! info "Citing"
     `platerecipy` is a platform under development. Depending on your installed 
-    version, the software version citation should point to the most recent prior
+    version, the software version citation should point to the appropriate
     release on Zenodo.

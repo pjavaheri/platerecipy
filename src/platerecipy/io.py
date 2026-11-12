@@ -17,7 +17,7 @@ Pejvak Javaheri; [pejvak.javaheri@mail.utoronto.ca](mailto:pejvak.javaheri@mail.
 import logging
 log = logging.getLogger(__name__)
 
-from . import _INT
+from . import _INT, __version__
 from .model import PlateModel
 from .grid import SphericalGrid, PartialSphericalGrid, CustomGrid
 
@@ -38,6 +38,9 @@ def save_as_vtu(
     """
     Assumes the existance of a mesh object.
     """
+    # embedding meta information
+    model.grid._mesh['_PLATERECIPY_VERSION_'] = __version__
+
     if isinstance(model.grid, SphericalGrid):
         mask = np.linspace(0, model.grid.xs.size-1, model.grid.xs.size).reshape(model.grid.xs.shape)
         mask = (mask >= model.grid.xs.shape[1]-1)&(mask<=(model.grid.xs.shape[0]-1)*model.grid.xs.shape[1])

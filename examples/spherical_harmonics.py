@@ -76,10 +76,10 @@ ax.pcolormesh(grid.phis, np.pi/2 - grid.thetas, model.ID_probs, cmap="coolwarm")
 fig.tight_layout()
 fig.savefig("field_plots.png", dpi=300)
 
-from platerecipy.io import save_mollweide_projection, save_as_vtk
+from platerecipy.io import save_mollweide_projection, save_as_vtu
 
-# generating ParaView readable legacy .vtk
-save_as_vtk(model)
+# generating ParaView readable legacy .vtu
+save_as_vtu(model)
 
 # generating .png Mollweide projection 
 save_mollweide_projection(model)
@@ -87,6 +87,10 @@ save_mollweide_projection(model)
 # mapping to original input data points
 org_IDs = grid.map_to_original_input(model.plate_IDs.ravel())
 
-plt.scatter(grid.original_phis, np.pi/2 - grid.original_thetas, c=org_IDs, marker='.', s=0.1)
-
-plt.savefig("original_mapping.png", dpi=300)
+fig, axes = plt.subplots(2, 1, figsize=(8,8))
+axes[0].set_title("Stacked field (of original points)")
+fig.colorbar(axes[0].scatter(grid.original_phis, np.pi/2 - grid.original_thetas, c=data_F, marker='.', s=0.1))
+axes[1].set_title("Plate IDs (of original points)")
+fig.colorbar(axes[1].scatter(grid.original_phis, np.pi/2 - grid.original_thetas, c=org_IDs, marker='.', s=0.1, cmap="coolwarm"))
+fig.tight_layout()
+fig.savefig("original_mapping.png", dpi=300)

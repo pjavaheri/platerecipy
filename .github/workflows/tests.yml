@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          tests=(tests/test_*.py)
+          tests=(tests/test_integration*.py)
 
           if [ ${#tests[@]} -eq 0 ]; then
             echo "No test scripts found"

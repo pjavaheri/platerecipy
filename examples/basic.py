@@ -50,6 +50,6 @@ m.find_plates(
     preserve_small_markers = True
 )
 
-# outputting as a ParaView readable .vtp file
+# outputting as a ParaView readable .vtu file
 from platerecipy import io
-io.save_as_vtp(m, filename='basic.vtp')
+io.save_as_vtu(m, filename='basic.vtu')

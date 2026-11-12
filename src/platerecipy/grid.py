@@ -184,7 +184,7 @@ class Grid(object):
             self._map
         )
     
-    def enforce_data_consistency(self, array: np.ndarray) -> None:
+    def _enforce_data_consistency(self, array: np.ndarray) -> None:
         pass
         
 
@@ -458,6 +458,36 @@ class PlanarGrid(Grid):
 
         log.debug('... grid created.')
 
+
+    def __str__(self):
+        return f'A PlanarGrid object with\nx_range={self._x_range}\ny_range={self._y_range}\nx_res={self._x_res}\ny_res={self._y_res}\nr={self._r:5.3e}\n'
+
+
+    @property
+    def x_range(self) -> tuple[float, float]:
+        '''Extent along the x-axis'''
+        return self._x_range
+
+    
+    @property
+    def y_range(self) -> tuple[float, float]:
+        '''Extent along the y-axis'''
+        return self._y_range
+    
+
+    @property
+    def x_res(self) -> int:
+        '''Resolution (number of nodes) along the x-axis'''
+        return self._x_res
+
+    
+    @property
+    def y_res(self) -> int:
+        '''Resolution (number of nodes) along the y-axis'''
+        return self._y_res
+    
+    
+
     
     def interpolate_field(
         self,
@@ -478,8 +508,7 @@ class PlanarGrid(Grid):
             fields that vary by orders of magnitude), default = False.
         
         method_kwargs : dict, optional
-            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
-            and `near_thresh`.
+            Not applicable to this class and retained for consistancy.
 
         
         Returns
@@ -543,8 +572,7 @@ class PlanarGrid(Grid):
             fields that vary by orders of magnitude), default = False.
         
         method_kwargs : dict, optional
-            Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
-            and `near_thresh`.
+            Not applicable to this class and retained for consistancy.
         
         
         Returns
@@ -753,23 +781,39 @@ class PartialSphericalGrid(Grid):
         '''Range of theta (polar angle)'''
         return self._theta_range
 
+
     @property
     def phi_range(self) -> tuple[float, float]:
-        '''Range of phi (polar angle)'''
+        '''Range of phi (azimuthal angle)'''
         return self._phi_range
     
+
+    @property
+    def theta_res(self) -> int:
+        '''Resolution (number of nodes) along theta (polar angle)'''
+        return self._theta_range
+    
+
+    @property
+    def phi_res(self) -> int:
+        '''Resolution (number of nodes) along phi (azimuthal angle)'''
+        return self._phi_range
+    
+
     @property
     def thetas(self):
         '''2D grid of spherical colatitude coordinates [0, pi]'''
         return self._thetas
     
+
     @property
     def phis(self):
         '''2D grid of spherical azimuthal coordinates [-pi, pi]'''
         return self._phis
 
-    def __str__(self): # this will raise an error as interp_thete_res is not defined
-        return f'A PartialSphericalGrid object with\ntheta_range={self.theta_range}\nphi_range={self.phi_range}\ninterp_theta_res={self.interp_theta_res}\ninterp_phi_res={self.interp_phi_res}\n'
+
+    def __str__(self):
+        return f'A PartialSphericalGrid object with\ntheta_range={self._theta_range}\nphi_range={self._phi_range}\ntheta_res={self._theta_res}\nphi_res={self._phi_res}\nr={self._r:5.3e}\n'
 
 
     def interpolate_field(
@@ -791,13 +835,13 @@ class PartialSphericalGrid(Grid):
             whether to perform the interpolation on the log space (suitable for
             fields that vary by orders of magnitude), default = False.
         
-        method : str, default = "lat-lon"
+        method : str, default = "tangent-plane"
             Whether to interpolate on the lat-lon space or to interpolate the 
             data points linearly on the tangent plane. Options: "lat-lon" or "tangent-plane"
         
         method_kwargs : dict, optional
             Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
-            and `near_thresh`.
+            `force_eps`, and `near_thresh`.
         
         Note
         ----
@@ -816,39 +860,22 @@ class PartialSphericalGrid(Grid):
         if take_log:
             field = np.log(field)
 
-        if method == "lat-lon":
-            log.debug('... lat-lon linear interpolation')
-
-            # this will leave the boundary (out of the convex hull) as NaNs
-            grid_linear = griddata(
-                self.original_points_in_theta_phi, 
-                field, 
-                (self.thetas, self.phis), 
-                method='linear'
-            )
-
-            # replacing NaNs with closest values
-            grid_nearest = griddata(
-                self.original_points_in_theta_phi, 
-                field, 
-                (self.thetas, self.phis), 
-                method='nearest'
-            )
-
-            grid_linear[np.isnan(grid_linear)] = grid_nearest[np.isnan(grid_linear)]
-
-        elif method == "tangent-plane":
+        
+        if method == "tangent-plane":
             log.debug('... tangent linear interpolation using an LSQ fit to the closest neighbors')
 
             # loading defaults
             if not 'k' in method_kwargs.keys():
-                method_kwargs['k'] = 4
+                method_kwargs['k'] = 5
             
             if not 'eps' in method_kwargs.keys():
                 method_kwargs['eps'] = 1e-6
             
+            if not 'force_eps' in method_kwargs.keys():
+                method_kwargs['force_eps'] = False
+            
             if not 'near_thresh' in method_kwargs.keys():
-                method_kwargs['near_thresh'] = 1e-6
+                method_kwargs['near_thresh'] = 1e-8 * self.r / np.sqrt(self.xs.size)
             
             if not hasattr(self, '_original_cart_mat'):
                 self._original_cart_mat = np.vstack([
@@ -869,10 +896,9 @@ class PartialSphericalGrid(Grid):
                 log.debug('... constructing a similarity tree')
                 self._original_kdtree = cKDTree(self._original_cart_mat)
             
-            if (not hasattr(self, '_original_neigh_dists')) or (not hasattr(self, '_original_neighs')):
-                log.debug('... querying the tree for near neighbors')
-                self._original_neigh_dists, self._original_neighs = \
-                    self._original_kdtree.query(self._cart_mat, k=method_kwargs['k'])
+            log.debug('... querying the tree for near neighbors')
+            self._original_neigh_dists, self._original_neighs = \
+                self._original_kdtree.query(self._cart_mat, k=method_kwargs['k'])
 
             neighs     = self._original_cart_mat[self._original_neighs]
             neigh_vals = field[self._original_neighs]            
@@ -905,16 +931,31 @@ class PartialSphericalGrid(Grid):
             G = np.transpose(G, [2, 0, 1])
             GT = np.transpose(G, [0, 2, 1])
             GTG = GT@G
-            trace_GTG = np.trace(GTG, axis1=1, axis2=2)
-            GTG[:, 0, 0] += method_kwargs['eps']*trace_GTG
-            GTG[:, 1, 1] += method_kwargs['eps']*trace_GTG
-            GTG[:, 2, 2] += method_kwargs['eps']*trace_GTG
+
+            if method_kwargs['force_eps']:
+                log.info("... applying Tikhonov regularization to improve convergence")
+                frob_norm_GTG = np.linalg.norm(GTG, ord='fro', axis=(1, 2))
+                GTG_scale = frob_norm_GTG / np.sqrt(GTG.size)
+                GTG[:, 0, 0] += method_kwargs['eps']*GTG_scale
+                GTG[:, 1, 1] += method_kwargs['eps']*GTG_scale
+                GTG[:, 2, 2] += method_kwargs['eps']*GTG_scale
+            
             B = np.vstack([fs[i] for i in range(method_kwargs['k'])])
             B = np.transpose(B, [1, 0])
             B = B.reshape((B.shape[0], B.shape[1], 1))
 
             log.debug('... solving all linear LSQ problems together (stacked)')
-            grid_linear = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel() # this may fail
+            try:
+                grid_linear = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel() # this may fail
+            except np.linalg.LinAlgError:
+                log.info("... singular interpolation matrix; applying Tikhonov regularization to improve convergence")
+                frob_norm_GTG = np.linalg.norm(GTG, ord='fro', axis=(1, 2))
+                GTG_scale = frob_norm_GTG / np.sqrt(GTG.size)
+                GTG[:, 0, 0] += method_kwargs['eps']*GTG_scale
+                GTG[:, 1, 1] += method_kwargs['eps']*GTG_scale
+                GTG[:, 2, 2] += method_kwargs['eps']*GTG_scale
+                
+                grid_linear = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel()
 
             # if a point is too close to a gride point, simply use its value
             grid_linear[
@@ -925,11 +966,100 @@ class PartialSphericalGrid(Grid):
 
             grid_linear = grid_linear.reshape(self.xs.shape)
         
+        elif method == "lat-lon":
+            log.debug('... lat-lon linear interpolation')
+
+            # this will leave the boundary (out of the convex hull) as NaNs
+            grid_linear = griddata(
+                self.original_points_in_theta_phi, 
+                field, 
+                (self.thetas, self.phis), 
+                method='linear'
+            )
+
+            # replacing NaNs with closest values
+            grid_nearest = griddata(
+                self.original_points_in_theta_phi, 
+                field, 
+                (self.thetas, self.phis), 
+                method='nearest'
+            )
+
+            grid_linear[np.isnan(grid_linear)] = grid_nearest[np.isnan(grid_linear)]
+
+        elif method == "triangle":
+            log.debug('... tangent linear interpolation using the area weighting of the closest 3 neighbors')
+            
+            if not hasattr(self, '_original_cart_mat'):
+                self._original_cart_mat = np.vstack([
+                    self.original_xs.ravel(), 
+                    self.original_ys.ravel(), 
+                    self.original_zs.ravel(),
+                ]).T
+            
+            if not hasattr(self, '_cart_mat'):
+                self._cart_mat = np.vstack([
+                    self.xs.ravel(), 
+                    self.ys.ravel(), 
+                    self.zs.ravel(),
+                ]).T
+            
+            # constructing a similarity tree
+            if not hasattr(self, '_original_kdtree'):
+                log.debug('... constructing a similarity tree')
+                self._original_kdtree = cKDTree(self._original_cart_mat)
+            
+            log.debug('... querying the tree for near neighbors')
+            self._original_neigh_dists, self._original_neighs = \
+                self._original_kdtree.query(self._cart_mat, k=3)
+
+            neighs     = self._original_cart_mat[self._original_neighs]
+            neigh_vals = field[self._original_neighs]            
+
+            # unit vectors on the surface
+            #r_hats = self._original_cart_mat / self.r
+            theta_hats = np.vstack([
+                np.cos(self.thetas.ravel())*np.cos(self.phis.ravel()),
+                np.cos(self.thetas.ravel())*np.sin(self.phis.ravel()),
+                -np.sin(self.thetas.ravel())
+            ]).T
+            phi_hats = np.vstack([
+                -np.sin(self.phis.ravel()),
+                np.cos(self.phis.ravel()),
+                np.zeros_like(self.thetas.ravel())
+            ]).T
+
+            # constructing a linear model on the tangent space
+            log.debug('... constructing the tangent space')
+            ps = np.array([
+                neighs[:, i, :] - self._cart_mat[:, :] \
+                    for i in range(3)
+            ])
+            fs = [neigh_vals[:, i] for i in range(3)]
+            xs = np.array([np.vecdot(ps[i, :, :], theta_hats, axis=1) for i in range(3)])
+            ys = np.array([np.vecdot(ps[i, :, :],   phi_hats, axis=1) for i in range(3)])
+            zs = np.zeros_like(xs)
+            
+            # projected positions
+            pps1 = np.vstack([xs[0, :], ys[0, :], zs[0, :]]).T
+            pps2 = np.vstack([xs[1, :], ys[1, :], zs[1, :]]).T
+            pps3 = np.vstack([xs[2, :], ys[2, :], zs[2, :]]).T
+
+            A1s   = np.linalg.norm(np.cross(pps2, pps3), axis=1) #actually twice the area
+            A2s   = np.linalg.norm(np.cross(pps3, pps1), axis=1) #actually twice the area
+            A3s   = np.linalg.norm(np.cross(pps1, pps2), axis=1) #actually twice the area
+            Atots = A1s + A2s + A3s                              #actually twice the area
+
+            grid_linear  = neigh_vals[:, 0]*A1s + neigh_vals[:, 1]*A2s + neigh_vals[:, 2]*A3s
+            grid_linear /= Atots
+            grid_linear  = grid_linear.reshape(self.xs.shape)
+
+        
         else:
             raise ValueError("Interpolation method is not recognized.")
 
 
-
+        '''
         # forcing boundary conditions by averaging
         if np.abs(self.theta_range[0]) < 1e-3:
             # if close to the north pole
@@ -945,8 +1075,9 @@ class PartialSphericalGrid(Grid):
             # this should not happen
             ##grid_linear[ :,  0] = 0.5 * (grid_linear[:, 0] + grid_linear[:, -1])
             ##grid_linear[ :, -1] = grid_linear[:, 0]
-            log.warning('Azimuthal end points are too close to each other. Please use a full spherical representation instead.')
-        
+            ###log.warning('Azimuthal end points are too close to each other. Please use a full spherical representation instead.')
+        '''
+
         # returning to original space
         if take_log:
             gridded_field = np.exp(grid_linear).astype(dtype=_FLOAT, order='C', copy=False)
@@ -978,13 +1109,13 @@ class PartialSphericalGrid(Grid):
             fields that vary by orders of magnitude), and makes a substantive
             difference if `method == 'linear'`, default = False.
         
-        method : str, default = "lat-lon"
+        method : str, default = "tanget-plane"
             Whether to interpolate on the lat-lon space or to interpolate the 
             data points linearly on the tangent plane. Options: "lat-lon" or "tangent-plane"
         
         method_kwargs : dict, optional
             Additional arguments for `method = "tangent-plane"`. Namely, `k`, `eps`, 
-            and `near_thresh`.
+            `force_eps` and `near_thresh`.
         
         Note
         ----
@@ -1002,45 +1133,21 @@ class PartialSphericalGrid(Grid):
         if take_log:
             field = np.log(field)
 
-        if method == "lat-lon":
-            log.debug('... lat-lon linear interpolation')
-
-            # by default the nearest method is used for the points
-            # outside the convex hull and an integer field (e.g., plate ID)
-            org_nearest = griddata(
-                (self.thetas.ravel(), self.phis.ravel()),
-                field.ravel(),  
-                self.original_points_in_theta_phi, 
-                method='nearest'
-            )
-
-            if field.dtype == _INT:
-                org_order = org_nearest.astype(_INT)
-            else:
-                # a float field will be interpolated linearly within
-                # the convex hull
-                org_linear = griddata(
-                    (self.thetas.ravel(), self.phis.ravel()),
-                    field.ravel(),  
-                    self.original_points_in_theta_phi, 
-                    method='linear'
-                )
-                org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
-                org_order = org_linear
-                
-        
-        elif method == "tangent-plane":
+        if method == "tangent-plane":
             log.debug('... tangent linear interpolation using an LSQ fit to the closest neighbors')
 
             # loading defaults
             if not 'k' in method_kwargs.keys():
-                method_kwargs['k'] = 4
+                method_kwargs['k'] = 5
             
             if not 'eps' in method_kwargs.keys():
                 method_kwargs['eps'] = 1e-6
             
+            if not 'force_eps' in method_kwargs.keys():
+                method_kwargs['force_eps'] = False
+            
             if not 'near_thresh' in method_kwargs.keys():
-                method_kwargs['near_thresh'] = 1e-6
+                method_kwargs['near_thresh'] = 1e-8 * self.r / np.sqrt(self.xs.size)
 
             if not hasattr(self, '_original_cart_mat'):
                 self._original_cart_mat = np.vstack([
@@ -1061,10 +1168,9 @@ class PartialSphericalGrid(Grid):
                 log.debug('... constructing a similarity tree')
                 self._kdtree = cKDTree(self._cart_mat)
             
-            if (not hasattr(self, '_neigh_dists')) or (not hasattr(self, '_neighs')):
-                log.debug('... querying the tree for near neighbors')
-                self._neigh_dists, self._neighs = \
-                    self._kdtree.query(self._original_cart_mat, k=method_kwargs['k'])
+            log.debug('... querying the tree for near neighbors')
+            self._neigh_dists, self._neighs = \
+                self._kdtree.query(self._original_cart_mat, k=method_kwargs['k'])
             
             neighs     = self._cart_mat[self._neighs]
             neigh_vals = field[self._neighs] 
@@ -1100,16 +1206,32 @@ class PartialSphericalGrid(Grid):
                 G = np.transpose(G, [2, 0, 1])
                 GT = np.transpose(G, [0, 2, 1])
                 GTG = GT@G
-                trace_GTG = np.trace(GTG, axis1=1, axis2=2)
-                GTG[:, 0, 0] += method_kwargs['eps']*trace_GTG
-                GTG[:, 1, 1] += method_kwargs['eps']*trace_GTG
-                GTG[:, 2, 2] += method_kwargs['eps']*trace_GTG
+
+                if method_kwargs['force_eps']:
+                    log.info("... applying Tikhonov regularization to improve convergence")
+                    frob_norm_GTG = np.linalg.norm(GTG, ord='fro', axis=(1, 2))
+                    GTG_scale = frob_norm_GTG / np.sqrt(GTG.size)
+                    GTG[:, 0, 0] += method_kwargs['eps']*GTG_scale
+                    GTG[:, 1, 1] += method_kwargs['eps']*GTG_scale
+                    GTG[:, 2, 2] += method_kwargs['eps']*GTG_scale
+                
                 B = np.vstack([fs[i] for i in range(method_kwargs['k'])])
                 B = np.transpose(B, [1, 0])
                 B = B.reshape((B.shape[0], B.shape[1], 1))
 
                 log.debug('... solving all linear LSQ problems together (stacked)')
-                org_order = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel() # this may fail
+                try:
+                    org_order = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel() # this may fail
+                except np.linalg.LinAlgError:
+                    log.info("... singular interpolation matrix; applying Tikhonov regularization to improve convergence")
+                    frob_norm_GTG = np.linalg.norm(GTG, ord='fro', axis=(1, 2))
+                    GTG_scale = frob_norm_GTG / np.sqrt(GTG.size)
+                    GTG[:, 0, 0] += method_kwargs['eps']*GTG_scale
+                    GTG[:, 1, 1] += method_kwargs['eps']*GTG_scale
+                    GTG[:, 2, 2] += method_kwargs['eps']*GTG_scale
+
+                    org_order = (np.linalg.solve(GTG, GT@B)[:, 0]).ravel()
+
 
                 # if a point is too close to a gride point, simply use its value
                 org_order[
@@ -1117,15 +1239,45 @@ class PartialSphericalGrid(Grid):
                 ] = fs[0][
                     self._neigh_dists[:, 0]/self.r < method_kwargs['near_thresh']
                 ]
-                
+        
+        elif method == "lat-lon":
+            log.debug('... lat-lon linear interpolation')
+
+            # by default the nearest method is used for the points
+            # outside the convex hull and an integer field (e.g., plate ID)
+            org_nearest = griddata(
+                (self.thetas.ravel(), self.phis.ravel()),
+                field.ravel(),  
+                self.original_points_in_theta_phi, 
+                method='nearest'
+            )
+
+            if field.dtype == _INT:
+                org_order = org_nearest.astype(_INT)
+            else:
+                # a float field will be interpolated linearly within
+                # the convex hull
+                org_linear = griddata(
+                    (self.thetas.ravel(), self.phis.ravel()),
+                    field.ravel(),  
+                    self.original_points_in_theta_phi, 
+                    method='linear'
+                )
+                org_linear[np.isnan(org_linear)] = org_nearest[np.isnan(org_linear)]
+                org_order = org_linear        
 
         else:
             raise ValueError("Interpolation method is not recognized.")
 
 
-        if take_log:
-            org_order = np.exp(org_order)
 
+        if take_log:
+            org_order = np.exp(org_order).astype(dtype=_FLOAT, order='C', copy=False)
+        else:
+            org_order = org_order.astype(dtype=_FLOAT, order='C', copy=False)
+
+
+        log.debug('... interpolation done.')
         return org_order
 
 
@@ -1277,13 +1429,15 @@ class SphericalGrid(PartialSphericalGrid):
             pv.CellType.TRIANGLE for _ in range((2*phi_res))
         ])
         self._mesh = pv.UnstructuredGrid(cells, cell_types, points)
+    
+
+    def __str__(self):
+        return f'A SphericalGrid object with:\ntheta_res={self._theta_res}\nphi_res={self._phi_res}\nr={self._r:5.3e}\n'
         
 
-    def enforce_data_consistency(self, array: np.ndarray):
+    def _enforce_data_consistency(self, array: np.ndarray):
         array[0, :] = array[0, -1]      # north pole
         #array[:, -1] = array[:, 0]      # wrap-around
         # wraparound column is removed ^^
         array[-1, :] = array[-1, 0]     # south-pole
 
-    def __str__(self):
-        return f'A SphericalGrid object with\ninterp_theta_res={self.interp_theta_res}\ninterp_phi_res={self.interp_phi_res}\n'

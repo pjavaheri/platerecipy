@@ -150,8 +150,8 @@ class PlateModel(object):
     
     def find_plates(
         self,
-        boundary_quantile       : float = 0.9,
-        boundary_absolute       : float = 1.0,
+        boundary_quantile       : float | None = None,
+        boundary_absolute       : float | None = None,
         separation_tolerance    : float | None = None,
         num_threads             : int | str = 'auto',
         min_marker_size         : int | None = None,
@@ -161,6 +161,7 @@ class PlateModel(object):
         RW_beta                 : float = 100.,
         RW_solver_tolerance     : float = 1e-3,
         RW_solver               : str = 'LU',
+        fast_mode               : bool = True,
         return_IDs              : bool = True
     ) -> np.ndarray | None:
         """
@@ -184,11 +185,11 @@ class PlateModel(object):
 
         Parameters
         ----------
-        boundary_quantile : float, default=0.9
+        boundary_quantile : float
             The quantile that represents values above which that are presumed to 
             feature plate boundaries.
         
-        boundary_absolute : float, default=1.0
+        boundary_absolute : float
             The absolute value that represents values above which that are 
             presumed to feature plate boundaries.
 
@@ -224,7 +225,7 @@ class PlateModel(object):
             a 2D Boolean array of the same shape as `self.stacked_field` that 
             indicates the seeds to the RW algorithm.
 
-        identify_non_conforming : bool, default=False
+        identify_nonconforming : bool, default=False
             Whether to extract and separately label non-conforming regions 
             defined by featuring a stacked field greater than 0.5 and a ID 
             probability less than 0.5 with ID=0.
@@ -241,9 +242,33 @@ class PlateModel(object):
             Numerical solver used to obtain an random walker probability solution.
             Possible choices: 'direct', 'LU', 'CG', or 'FA'.
         
+        fast_mode : bool, default=True
+            Whether to re-use previously generated marker/label arrays to increase performance.
+        
         return_IDs : bool, default=True
             Whether to return a copy of `self.plate_IDs`.
         """
+        
+
+        reuse_markers = False
+        if fast_mode and hasattr(self, "_find_plates_prev_args"):
+            reuse_markers = (self._find_plates_prev_args['boundary_quantile'] == boundary_quantile) \
+            and (self._find_plates_prev_args['boundary_absolute'] == boundary_absolute) \
+            and (self._find_plates_prev_args['separation_tolerance'] == separation_tolerance) \
+            and (self._find_plates_prev_args['min_marker_size'] == min_marker_size) \
+            and (self._find_plates_prev_args['preserve_small_markers'] == preserve_small_markers) \
+            and (self._find_plates_prev_args['manual_markers'] == None) \
+            and (manual_markers == None)
+
+        self._find_plates_prev_args = {
+            'boundary_quantile'         : boundary_quantile,
+            'boundary_absolute'         : boundary_absolute,       
+            'separation_tolerance'      : separation_tolerance,
+            'min_marker_size'           : min_marker_size,  
+            'preserve_small_markers'    : preserve_small_markers,
+            'manual_markers'            : manual_markers,
+        }
+
         if self.stacked_field is None:
             raise ValueError('No field is stacked for segmentation. Please use `stack_field()` method function to stack at least one field.')
 
@@ -252,14 +277,25 @@ class PlateModel(object):
         
         if manual_markers is not None:
             self.markers = manual_markers
+        elif reuse_markers:
+            log.warning('Reusing the previous markers array for speedup. To disable, set `fast_mode=False`.')
         else:
+            if (boundary_quantile is None) and (boundary_absolute is None):
+                log.error('At least either `boundary_quantile` or `boundary_absolute` must be specified.')
+                raise ValueError('At least either `boundary_quantile` or `boundary_absolute` must be specified.')
 
-            self.boundary_quantile_value = np.quantile(
-                self.stacked_field, 
-                [boundary_quantile]
-            )[0]
+            if boundary_quantile is not None:
+                self.boundary_quantile_value = np.quantile(
+                    self.stacked_field, 
+                    [boundary_quantile]
+                )[0]
+            else:
+                self.boundary_quantile_value = 1.
 
-            self.boundary_absolute = boundary_absolute
+            if boundary_absolute is not None:
+                self.boundary_absolute = boundary_absolute
+            else: 
+                self.boundary_absolute = 1.
 
             self.boundary_threshold = np.min([self.boundary_absolute, self.boundary_quantile_value])
 
@@ -283,7 +319,7 @@ class PlateModel(object):
                 del temp_labels, temp_unique_labels
             
             if separation_tolerance is not None:
-                log.info(f"Allowing for {separation_tolerance:5.2e} (in radians) of separation tolerance to patch missing plate boundary segments ...")
+                log.info(f"Allowing for {separation_tolerance:5.2e} (in radians if spherical) of separation tolerance to patch missing plate boundary segments ...")
                 if preserve_small_markers:
                     log.info(f"Preserving small markers against separation tolerance ...")
                     temp_pre_labels = label_markers(self.grid, self.markers)
@@ -305,8 +341,13 @@ class PlateModel(object):
                         if not np.any(self.markers[temp_mask]):
                             self.markers[temp_mask] = True
 
-        # labeling the markers with positive integers
-        self.labels = label_markers(self.grid, self.markers)
+        if np.all(~self.markers):
+            log.error('No markers found. Please adjust `boundary_quantile`, `boundary_absolute`, and `separation_tolerance` so that they yield at lease one marker.')
+            raise ValueError('No markers found. Please adjust `boundary_quantile`, `boundary_absolute`, and `separation_tolerance` so that they yield at lease one marker.')
+
+        if not reuse_markers:
+            # labeling the markers with positive integers
+            self.labels = label_markers(self.grid, self.markers)
 
         # handling both spherical and planar cases
         log.info(f"Applying the Random Walker algorithm with beta={RW_beta:5.2e} ...")
@@ -322,5 +363,13 @@ class PlateModel(object):
         if identify_nonconforming:
             self.plate_IDs[(self.stacked_field > self.boundary_threshold) | (self.ID_probs < 0.5)] = 0
         
+        # embedding meta information
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_BDTHRESH_']   = f"{self.boundary_threshold:5.3e}"
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_RWBETA_']     = f"{RW_beta:5.3e}"
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_SEPTOL_']     = f"{separation_tolerance:5.3e}" if separation_tolerance is not None else "None"
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_SMLMRK_']     = str(preserve_small_markers)
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_MINMRKSZ_']   = str(min_marker_size)
+        self.grid.mesh['_PLATERECIPY_PLATEMODEL_MANMRKFLD_']  = str(manual_markers is not None)
+
         if return_IDs:
             return self.plate_IDs.copy()

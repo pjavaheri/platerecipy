@@ -159,10 +159,10 @@ now we can replot our fields:
 
 or we can simply use `platerecipy`'s built-in io functions:
 ```python
-from platerecipy.io import save_mollweide_projection, save_as_vtk
+from platerecipy.io import save_mollweide_projection, save_as_vtu
 
-# generating ParaView readable legacy .vtk
-save_as_vtk(model)
+# generating ParaView readable .vtu file
+save_as_vtu(model)
 
 # generating .png Mollweide projection 
 save_mollweide_projection(model)
@@ -177,10 +177,6 @@ We can see that by introducing some separation tolerance, we were able to recove
 the main candidate plates. The following subsection discusses the red micro marker (`plate_ID == 3`)
 located roughly near 70 degrees east and 30 degrees south. 
 
-!!! note "`platerecipy.io.save_as_vtk` vs. `platerecipy.io.save_as_vtp`"
-    Both of these functions generate ParaView readable output.  However, `save_as_vtk`
-    does not require third party packages of `vtk` and `pyvista`. Accordingly, 
-    by default `save_as_vtk` is preferred.
 
 ??? tip "Complete script (click)"
     ```python
@@ -262,10 +258,10 @@ located roughly near 70 degrees east and 30 degrees south.
     fig.tight_layout()
     fig.savefig("field_plots.png", dpi=300)
 
-    from platerecipy.io import save_mollweide_projection, save_as_vtk
+    from platerecipy.io import save_mollweide_projection, save_as_vtu
 
-    # generating ParaView readable legacy .vtk
-    save_as_vtk(model)
+    # generating ParaView readable .vtu file
+    save_as_vtu(model)
 
     # generating .png Mollweide projection 
     save_mollweide_projection(model)

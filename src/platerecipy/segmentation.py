@@ -335,6 +335,10 @@ def random_walker(
         log.error("Labels must be sequential positive integers starting from 1.")
         raise ValueError("Labels are not sequential.")
 
+    if largest_label == 0:
+        log.error('No markers/labels were provided.')
+        raise ValueError('No markers/labels were provided.')
+        
     if largest_label == 1:
         log.warning('Only 1 label was found.')
         return np.ones(data.shape, dtype=_INT, order='C'), \
@@ -409,8 +413,8 @@ def random_walker(
         raise ValueError("Unrecognized probability strucutre.")
 
     if isinstance(grid, SphericalGrid):
-        grid.enforce_data_consistency(IDs)
-        grid.enforce_data_consistency(ID_probs)
+        grid._enforce_data_consistency(IDs)
+        grid._enforce_data_consistency(ID_probs)
     
     return IDs, ID_probs
 

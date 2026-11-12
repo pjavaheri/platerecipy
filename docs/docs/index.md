@@ -2,12 +2,6 @@
 
 # Welcome to `platerecipy`: a package for PLATE RECognition in PYthon!
 
-!!! warning "Stay tuned for an upcoming `platerecipy` release"
-    * Direct import of irregular grids
-    * Multithreaded functionalities on Windows
-    * Enhanced performance
-    * And more!
-
 ## Features
 
 * Reliable surface tesselation and **candidate plate detection**
@@ -16,6 +10,13 @@
 * Utilizes `numpy` arrays for the ease of use and integration in `Python` projects
 * Straight-forward save and export to `Octave/MATLAB` and `ParaView` 
 * Designed for maximized compatibility with **terrestrial data sets** and **geodynamic model output**
+
+![Version](https://img.shields.io/github/v/tag/pjavaheri/platerecipy?label=Version&color=blueviolet)
+[![Version](https://img.shields.io/github/v/tag/pjavaheri/platerecipy?label=PyPI&color=red)](https://pypi.org/project/platerecipy/)
+[![https://img.shields.io/badge/License-MIT-yellow.svg](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pjavaheri/platerecipy/blob/master/LICENSE)
+[![Documentation](https://img.shields.io/badge/Documentation-readthedocs-blue.svg)](https://platerecipy.readthedocs.io/)
+![Integration Tests](https://img.shields.io/github/actions/workflow/status/pjavaheri/platerecipy/tests.yml?branch=master&label=Integration%20Tests)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15625715.svg)](https://doi.org/10.5281/zenodo.15625715)
 
 ## How it works
 For a detailed explanation and illustration of `platerecipy`'s core functionalities,

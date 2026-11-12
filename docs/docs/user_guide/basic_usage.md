@@ -38,9 +38,9 @@ m.find_plates(
     min_marker_size       = 100             # to filter out micro plates
 )
 
-# outputting as a ParaView readable .vtk file
+# outputting as a ParaView readable .vtu file
 from platerecipy import io
-io.save_as_vtk(m)
+io.save_as_vtu(m)
 ```
 
 # Additional examples

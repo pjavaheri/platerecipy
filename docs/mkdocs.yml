@@ -30,6 +30,7 @@ nav:
   - Home: index.md
   - Installation: install.md
   - User Guide: 
+    - Overview: user_guide/overview.md
     - Basic Usage: user_guide/basic_usage.md
     - Detailed Example: user_guide/detailed_example.md
     - vtu Imports and Irregular Grids: user_guide/vtu_import.md
