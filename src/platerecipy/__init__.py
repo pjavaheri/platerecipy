@@ -39,7 +39,7 @@ _INT     = int32
 _FLOAT   = float64
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import sys
-_IS_WINDOWS = (sys.platform == 'win32')
+_IS_WINDOWS = (sys.platform == 'win32') # so far, unused
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~ embedding version info ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 from importlib.metadata import version, PackageNotFoundError

@@ -587,6 +587,7 @@ Map * alloc_sph_map(
     return map;
 }
 
+
 void set_cartesian_edge_length(
     Map *       map,
     double *    xs,
@@ -594,6 +595,8 @@ void set_cartesian_edge_length(
     double *    zs,
     double      R
 ) {
+    const double one_R = 1./R;
+
     for (int i = 0; i < map->num_nodes; i++) {
         const double x0 = xs[map->nodes[i].npy_idx];
         const double y0 = ys[map->nodes[i].npy_idx];
@@ -603,10 +606,11 @@ void set_cartesian_edge_length(
             const double dxj = xs[map->nodes[map->nodes[i].neighs[j]].npy_idx]-x0;
             const double dyj = ys[map->nodes[map->nodes[i].neighs[j]].npy_idx]-y0;
             const double dzj = zs[map->nodes[map->nodes[i].neighs[j]].npy_idx]-z0;
-            map->nodes[i].edge_lengths[j] = sqrt(dxj*dxj + dyj*dyj + dzj*dzj)/R;
+            map->nodes[i].edge_lengths[j] = sqrt(dxj*dxj + dyj*dyj + dzj*dzj)*one_R;
         }
     }
 }
+
 
 void set_spherical_edge_length(
     Map *       map,
@@ -615,7 +619,8 @@ void set_spherical_edge_length(
     double *    zs,
     double      R
 ) {
-    const double R2 = R*R;
+    const double one_R2 = 1./(R*R);
+
     for (int i = 0; i < map->num_nodes; i++) {
         const double x0 = xs[map->nodes[i].npy_idx];
         const double y0 = ys[map->nodes[i].npy_idx];
@@ -625,10 +630,11 @@ void set_spherical_edge_length(
             const double xj = xs[map->nodes[map->nodes[i].neighs[j]].npy_idx];
             const double yj = ys[map->nodes[map->nodes[i].neighs[j]].npy_idx];
             const double zj = zs[map->nodes[map->nodes[i].neighs[j]].npy_idx];
-            map->nodes[i].edge_lengths[j] = acos(((xj*x0) + (yj*y0) + (zj*z0))/R2);
+            map->nodes[i].edge_lengths[j] = acos(((xj*x0) + (yj*y0) + (zj*z0))*one_R2);
         }
     }
 }
+
 
 void free_map(Map * map) {
     if (grid_h_logger) grid_h_logger("Deallocating map memory ...");

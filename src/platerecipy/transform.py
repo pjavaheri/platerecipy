@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 import os
 import numpy as np
 
-from . import _INT, _FLOAT, _IS_WINDOWS
+from . import _INT, _FLOAT
 from .grid import Grid, Map, SphericalGrid
 
 # ~~~~~~~~~~~~~~ importing shared libraries ~~~~~~~~~~~~~

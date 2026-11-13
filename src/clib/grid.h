@@ -180,6 +180,45 @@ CLIB_EXPORT Map * alloc_sph_map(
     int32_t j_max
 );
 
+
+/**
+ * Set map's edge lengths based on Cartesian distances (Eulerian norm). 
+ * The distances are non-dimensionalized by R.
+ *
+ * @param map a pointer to a Map struct 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates
+ * @param R the radius of the sphere
+ */
+CLIB_EXPORT void set_cartesian_edge_length(
+    Map *       map,
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    double      R
+);
+
+
+/**
+ * Set map's edge lengths based on spherical distances (great-circle). 
+ * The distances are non-dimensionalized by R.
+ *
+ * @param map a pointer to a Map struct 
+ * @param xs Cartesian x coordinates
+ * @param ys Cartesian y coordinates
+ * @param zs Cartesian z coordinates
+ * @param R the radius of the sphere
+ */
+CLIB_EXPORT void set_spherical_edge_length(
+    Map *       map,
+    double *    xs,
+    double *    ys,
+    double *    zs,
+    double      R
+);
+
+
 /**
  * Free all heap-allocated arrays embedded directly or indirectly 
  * within the map struct.

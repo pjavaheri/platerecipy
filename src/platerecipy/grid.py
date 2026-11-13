@@ -137,6 +137,28 @@ platerecipy_clib_grid.alloc_sph_map.argtypes = [
 platerecipy_clib_grid.alloc_sph_map.restype = ctypes.POINTER(Map)
 
 
+# platerecipy_clib_grid.set_cartesian_edge_length() function signature
+platerecipy_clib_grid.set_cartesian_edge_length.argtypes = [
+    ctypes.POINTER(Map),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_int32,
+]
+platerecipy_clib_grid.set_cartesian_edge_length.restype = None
+
+
+# platerecipy_clib_grid.set_spherical_edge_length() function signature
+platerecipy_clib_grid.set_spherical_edge_length.argtypes = [
+    ctypes.POINTER(Map),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.POINTER(ctypes.c_int32),
+    ctypes.c_int32,
+]
+platerecipy_clib_grid.set_spherical_edge_length.restype = None
+
+
 # platerecipy_clib_grid.free_map() function signature
 platerecipy_clib_grid.free_map.argtypes = [
     ctypes.POINTER(Map)
