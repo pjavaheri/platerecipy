@@ -299,25 +299,7 @@ class PlateModel(object):
 
             self.boundary_threshold = np.min([self.boundary_absolute, self.boundary_quantile_value])
 
-            # operating on a separate copy
-            #self.stacked_field_for_segmentation = self.stacked_field.copy()
-            
-            self.markers = (self.stacked_field < self.boundary_threshold)
-            
-            # filtering out micro markers
-            if min_marker_size is not None:
-                log.info(f"Filtering marker pataches comprised of fewer than {min_marker_size} nodes ...")
-                temp_labels = label_markers(self.grid, self.markers)
-
-                # removing labels that have non-empty intersections
-                temp_unique_labels = np.unique(temp_labels)
-
-                for label in temp_unique_labels:
-                    if np.sum(temp_labels == label) < min_marker_size:
-                        self.markers[temp_labels == label] = False
-                
-                del temp_labels, temp_unique_labels
-            
+            # connecting the gaps in the marker boundaries
             if separation_tolerance is not None:
                 log.info(f"Allowing for {separation_tolerance:5.2e} (in radians if spherical) of separation tolerance to patch missing plate boundary segments ...")
                 if preserve_small_markers:
@@ -340,6 +322,20 @@ class PlateModel(object):
                         temp_mask = (temp_pre_labels == label)
                         if not np.any(self.markers[temp_mask]):
                             self.markers[temp_mask] = True
+            
+            # filtering out micro markers
+            if min_marker_size is not None:
+                log.info(f"Filtering marker pataches comprised of fewer than {min_marker_size} nodes ...")
+                temp_labels = label_markers(self.grid, self.markers)
+
+                # removing labels that have non-empty intersections
+                temp_unique_labels = np.unique(temp_labels)
+
+                for label in temp_unique_labels:
+                    if np.sum(temp_labels == label) < min_marker_size:
+                        self.markers[temp_labels == label] = False
+                
+                del temp_labels, temp_unique_labels
 
         if np.all(~self.markers):
             log.error('No markers found. Please adjust `boundary_quantile`, `boundary_absolute`, and `separation_tolerance` so that they yield at lease one marker.')

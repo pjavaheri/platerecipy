@@ -85,7 +85,7 @@ with open(
 
 setup(
     name                            = 'platerecipy',
-    version                         = '2.2.2',
+    version                         = '2.2.3',
     description                     = 'PLATE RECognition In PYthon',
     long_description                = long_description,
     long_description_content_type   = 'text/markdown',

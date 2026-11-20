@@ -1394,7 +1394,7 @@ class SphericalGrid(PartialSphericalGrid):
             self._theta_range[1], 
             self._theta_res, dtype=_FLOAT
         )
-        # phis are [0, 2pi) excluding the end point
+        # phis are [-pi, pi) excluding the end point
         self._mercator_phis = np.linspace(
             self._phi_range[0], 
             self._phi_range[1], 

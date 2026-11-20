@@ -4,6 +4,15 @@ Summary of key changes from the backend to the user interface.
 
 ## Version 2.x
 
+### Version 2.2.3
+* Updating the order of operations in PlateModel for consistency
+
+### Version 2.2.2
+* Fixing C-type pointer declerations
+
+### Version 2.2.1
+* Patching function exports (DLL) from grid.h on Windows
+
 ### Version 2.2.0
 * Embedding version number and segmentation parameters in output `vtu` files
 * Added `fast_mode` as default to reuse markers if segmentation parameters are unchanged from a previous call
