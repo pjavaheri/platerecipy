@@ -299,6 +299,8 @@ class PlateModel(object):
 
             self.boundary_threshold = np.min([self.boundary_absolute, self.boundary_quantile_value])
 
+            self.markers = (self.stacked_field < self.boundary_threshold)
+
             # connecting the gaps in the marker boundaries
             if separation_tolerance is not None:
                 log.info(f"Allowing for {separation_tolerance:5.2e} (in radians if spherical) of separation tolerance to patch missing plate boundary segments ...")

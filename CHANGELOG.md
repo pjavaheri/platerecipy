@@ -4,6 +4,9 @@ Summary of key changes from the backend to the user interface.
 
 ## Version 2.x
 
+### Version 2.2.4
+* Minor bug fix
+
 ### Version 2.2.3
 * Updating the order of operations in PlateModel for consistency
 
