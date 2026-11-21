@@ -294,7 +294,7 @@ class CustomGrid(Grid):
                     # found a surface that wraps the previous stored region
                     radius = region_radius
                     mesh = region
-            self.is_planar = True
+            self.is_planar = False
             log.warning('... spherical surface extracted.')
         else:
             mesh: pv.UnstructuredGrid = pv.read(vtu_path)
@@ -302,6 +302,7 @@ class CustomGrid(Grid):
             # checking to see if planar
             distances_from_origin = np.linalg.norm(mesh.points, axis=1)
             self.is_planar = distances_from_origin.std()/distances_from_origin.mean() > 1e-6
+            log.warning(f'... the surface is found to be {"planar" if self.is_planar else "spherical"}')
 
 
         self._mesh = mesh

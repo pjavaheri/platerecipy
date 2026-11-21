@@ -4,6 +4,9 @@ Summary of key changes from the backend to the user interface.
 
 ## Version 2.x
 
+### Version 2.2.6
+* Fixing a bug with the automatic spherical surface extraction from an input vtu file 
+
 ### Version 2.2.5
 * Minor bug fix
 
