@@ -294,6 +294,7 @@ class CustomGrid(Grid):
                     # found a surface that wraps the previous stored region
                     radius = region_radius
                     mesh = region
+            self.is_planar = True
             log.warning('... spherical surface extracted.')
         else:
             mesh: pv.UnstructuredGrid = pv.read(vtu_path)
